@@ -159,6 +159,11 @@ describe("rodada do coletor", () => {
     // Fora da saúde: fica o registro (para não baixar de novo), sem itens; exclusão do segmento vale.
     expect(memoria.compras.get(chave(2))).toMatchObject({ area_saude: false, itens: [] });
     expect(memoria.compras.get(chave(3))).toMatchObject({ area_saude: false });
+    expect(memoria.fases).toEqual([
+      "buscando 3 termos no PNCP",
+      "baixando itens de 3 editais",
+      "conferindo editais já conhecidos",
+    ]);
     // Só busca arquivos do que é da saúde, e cada compra é baixada uma vez.
     expect(chamadas.filter((c) => c.startsWith("arquivos"))).toEqual(["arquivos:1"]);
     expect(chamadas.filter((c) => c === "itens:1")).toHaveLength(1);

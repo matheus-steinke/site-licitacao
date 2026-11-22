@@ -132,6 +132,10 @@ export async function executarRodada(
     }
   };
   const avisos: string[] = [];
+  const andamento = async (fase: string) => {
+    registrar(`fase: ${fase}`);
+    await repositorio.registrarAndamento(rodadaId, totais, fase);
+  };
 
   try {
     const segmentos = prepararSegmentos(await repositorio.listarSegmentosAtivos());
@@ -155,6 +159,7 @@ export async function executarRodada(
 
     if (cfg.fonte !== "plano_b") {
       const termos = await termosDeBusca(repositorio, cfg.limiteDeTermos);
+      await andamento(`buscando ${termos.length} termos no PNCP`);
       let termosComFalha = 0;
 
       const buscarTermo = async (termo: string) => {
@@ -196,12 +201,14 @@ export async function executarRodada(
 
     if (buscaForaDoAr && cfg.fonte !== "busca") {
       totais.fonte = "plano_b";
+      await andamento("busca fora do ar; listando todas as contratações abertas (plano B)");
       const antes = candidatas.size;
       await planoB(pncp, cfg, janelaFim, naJanela, segmentos, candidatas, semTempo);
       registrar(`plano B: ${candidatas.size - antes} editais pelo objeto`);
     }
     await descarregarFalhas();
     totais.compras_encontradas = candidatas.size;
+    await andamento(`baixando itens de ${candidatas.size} editais`);
 
     // -----------------------------------------------------------------------
     // 2. Itens e filtro "área da saúde"
@@ -319,6 +326,7 @@ export async function executarRodada(
     // 3. Compras que já conhecemos e não apareceram nesta rodada
     //    (suspensas e revogadas saem da busca de "recebendo proposta")
     // -----------------------------------------------------------------------
+    await andamento("conferindo editais já conhecidos");
     const ontem = new Date(inicio.getTime() - 86_400_000).toISOString();
     const revisitar = async (
       lista: { controle_pncp: string; orgao_cnpj: string; ano: number; sequencial: number }[],

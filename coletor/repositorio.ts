@@ -51,6 +51,8 @@ export interface Repositorio {
   listarSegmentosAtivos(): Promise<SegmentoBruto[]>;
   iniciarRodada(origem: "agendado" | "manual"): Promise<string>;
   registrarErro(rodadaId: string, erro: ErroDaRodada): Promise<void>;
+  /** Grava os números parciais e em que fase a rodada está (para acompanhar pelo painel). */
+  registrarAndamento(rodadaId: string, parcial: TotaisDaRodada, fase: string): Promise<void>;
   finalizarRodada(rodadaId: string, totais: TotaisDaRodada): Promise<void>;
   buscarConhecidas(controles: string[]): Promise<Map<string, CompraConhecida>>;
   gravarCompra(gravacao: Gravacao): Promise<ResultadoGravacao>;
@@ -172,6 +174,18 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
       if (error) console.error("não consegui registrar o erro:", resumirErro(error.message));
     },
 
+    async registrarAndamento(rodadaId, parcial, fase) {
+      // O status continua "em_andamento" até a rodada terminar.
+      const { error } = await tentarNoBanco(() =>
+        supabase
+          .from("coletor_rodadas")
+          .update({ ...parcial, status: "em_andamento", mensagem: `Em andamento: ${fase}` })
+          .eq("id", rodadaId),
+      );
+      // O andamento é só informativo: não pode derrubar a rodada.
+      if (error) console.error("não consegui registrar o andamento:", resumirErro(error.message));
+    },
+
     async finalizarRodada(rodadaId, totais) {
       const { error } = await tentarNoBanco(() =>
         supabase
@@ -237,6 +251,7 @@ export type CompraEmMemoria = {
 export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () => Date = () => new Date()) {
   const compras = new Map<string, CompraEmMemoria>();
   const rodadas: (TotaisDaRodada | { status: "em_andamento" })[] = [];
+  const fases: string[] = [];
   const erros: ErroDaRodada[] = [];
   const alteracoes: { controle_pncp: string; campo: string; de: unknown; para: unknown }[] = [];
 
@@ -263,6 +278,9 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
     },
     async registrarErro(_rodadaId, erro) {
       erros.push(erro);
+    },
+    async registrarAndamento(_rodadaId, _parcial, fase) {
+      fases.push(fase);
     },
     async finalizarRodada(rodadaId, totais) {
       rodadas[Number(rodadaId)] = totais;
@@ -328,5 +346,5 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
     listarPendentes: async (desde, antesDe, limite) => listar(false, desde, antesDe, limite),
   };
 
-  return { repositorio, compras, rodadas, erros, alteracoes };
+  return { repositorio, compras, rodadas, erros, alteracoes, fases };
 }
