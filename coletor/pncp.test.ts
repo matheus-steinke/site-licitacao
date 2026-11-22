@@ -100,3 +100,23 @@ describe("cliente do PNCP", () => {
     expect(esperas[1]).toBeGreaterThan(550);
   });
 });
+
+describe("limite duro de tempo", () => {
+  it("desiste de uma chamada que nunca responde e tenta de novo", async () => {
+    let chamadas = 0;
+    const cliente = criarClientePncp({
+      pausaMs: 0,
+      timeoutMs: 20,
+      tentativas: 2,
+      esperaInicialMs: 1,
+      dormir: async () => {},
+      // Ignora o sinal de cancelamento de propósito: simula uma conexão pendurada.
+      fetch: (() => {
+        chamadas++;
+        return new Promise<Response>(() => {});
+      }) as typeof fetch,
+    });
+    await expect(cliente.obterJson("/x")).rejects.toMatchObject({ message: expect.stringContaining("sem resposta") });
+    expect(chamadas).toBe(2);
+  }, 20_000);
+});
