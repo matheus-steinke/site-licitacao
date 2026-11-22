@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CalendarClock, FlaskConical, MapPin, PackageOpen } from "lucide-react";
+import { CalendarClock, ExternalLink, FlaskConical, MapPin, PackageOpen } from "lucide-react";
 import Link from "next/link";
 
 import { CabecalhoPagina } from "@/components/app/cabecalho-pagina";
@@ -52,6 +52,17 @@ function CartaoCompra({ compra }: { compra: CompraResumo }) {
           <dt className="text-muted-foreground">Valor estimado do edital</dt>
           <dd className="font-medium tabular-nums">{formatarMoeda(compra.valor_total_estimado)}</dd>
         </div>
+        {compra.linkPncp ? (
+          <a
+            href={compra.linkPncp}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 font-medium underline-offset-4 hover:underline sm:ml-auto"
+          >
+            Ver no PNCP
+            <ExternalLink className="size-3.5" aria-hidden />
+          </a>
+        ) : null}
       </dl>
     </li>
   );
@@ -59,11 +70,10 @@ function CartaoCompra({ compra }: { compra: CompraResumo }) {
 
 export default async function PaginaOportunidades() {
   const { org } = await exigirOrganizacao();
-  const [compras, totalProdutos] = await Promise.all([
+  const [{ compras, soExemplos }, totalProdutos] = await Promise.all([
     listarCompras(org.ufs),
     contarProdutos(org.id),
   ]);
-  const soExemplos = compras.length > 0 && compras.every((c) => c.exemplo);
 
   return (
     <>
@@ -94,13 +104,14 @@ export default async function PaginaOportunidades() {
         </Alert>
       ) : null}
 
-      {soExemplos ? (
+      {soExemplos && compras.length > 0 ? (
         <Alert className="mb-4">
           <FlaskConical aria-hidden />
           <AlertTitle>Você está vendo licitações de exemplo</AlertTitle>
           <AlertDescription>
-            São dados fictícios para testar o app. As licitações reais do PNCP entram na etapa 4
-            (coletor) e a triagem pelo seu catálogo, com aprovar e descartar, na etapa 5.
+            São dados fictícios para testar o app. Elas somem assim que o coletor trouxer as
+            primeiras licitações reais do PNCP. A triagem pelo seu catálogo, com aprovar e
+            descartar, chega na etapa 5.
           </AlertDescription>
         </Alert>
       ) : null}

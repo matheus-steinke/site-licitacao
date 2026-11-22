@@ -137,3 +137,8 @@ select c.id, 1, 'Edital (exemplo fictício)', 'Edital', 'https://pncp.gov.br/app
 from public.compras c
 where c.exemplo
 on conflict (compra_id, sequencial_documento) do nothing;
+
+-- As compras de exemplo já entram classificadas como área da saúde (o coletor faz isso
+-- com as reais), para aparecerem para os clientes.
+update public.compras set area_saude = true, itens_coletados_em = now()
+where exemplo and area_saude is null;

@@ -1,0 +1,60 @@
+name: Coletor do PNCP
+
+# Busca licitações da área da saúde no PNCP e grava no Supabase.
+# Configuração (uma vez), em Settings > Secrets and variables > Actions:
+#   - Secret   SUPABASE_SERVICE_ROLE_KEY: chave "service_role"/"secret" do Supabase
+#   - Variable SUPABASE_URL: https://SEU-PROJETO.supabase.co
+
+on:
+  schedule:
+    # A cada 2 horas (horário UTC), no minuto 17 para fugir do pico da hora cheia.
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      fonte:
+        description: "De onde descobrir os editais"
+        type: choice
+        options: [auto, busca, plano_b]
+        default: auto
+      termos:
+        description: "Usar só os N primeiros termos (teste rápido). Em branco = todos."
+        required: false
+        type: string
+
+# Nunca duas rodadas ao mesmo tempo: a nova espera a anterior terminar.
+concurrency:
+  group: coletor-pncp
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Rodar o coletor
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EVENTO: ${{ github.event_name }}
+          FONTE: ${{ inputs.fonte }}
+          TERMOS: ${{ inputs.termos }}
+        run: |
+          argumentos=()
+          if [ "$EVENTO" = "workflow_dispatch" ]; then argumentos+=(--manual); fi
+          case "$FONTE" in busca|plano_b) argumentos+=(--fonte "$FONTE");; esac
+          if [[ "$TERMOS" =~ ^[0-9]+$ ]]; then argumentos+=(--termos "$TERMOS"); fi
+          pnpm coletor "${argumentos[@]}"

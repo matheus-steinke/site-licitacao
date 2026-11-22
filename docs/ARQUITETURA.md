@@ -137,7 +137,43 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 23. **Busca do catálogo** ainda diferencia acentos ("canula" não acha "cânula"). A busca sem
     acento entra na etapa 6, junto com a busca de licitações.
 
-## Pontos a confirmar durante a construção
+## Decisões tomadas na etapa 4
 
-- Nomes reais dos campos da API do PNCP (etapa 4).
-- Se a API de itens do PNCP devolve lote/grupo de forma confiável; se não, o alerta de "lote incompleto" depende do texto do edital.
+24. **Descoberta pela busca, com filtro por itens.** A busca do PNCP enxerga a descrição dos
+    itens; depois de baixar os itens, só fica o edital com pelo menos um item que case com
+    algum segmento. O edital descartado fica gravado sem itens (`area_saude = false`), só
+    para não ser baixado a cada rodada.
+25. **Edital sem itens ainda fica invisível** (`area_saude` nulo) até a API de itens responder.
+26. **Plano B só quando a busca falha:** ele precisa paginar todas as contratações abertas
+    (centenas de chamadas) e filtra pelo objeto, então é mais pesado e menos preciso.
+27. **Gravação por função do banco** (`coletor_gravar_compra`): uma transação por edital, com
+    histórico de mudança de situação e de data. Itens são atualizados no lugar, mantendo o
+    id (as oportunidades da etapa 5 vão apontar para eles).
+28. **Casamento de termos por palavras inteiras e próximas**, sem preposições e no singular,
+    em `src/lib/texto`. É a base da triagem da etapa 5.
+29. **Sinônimos genéricos removidos do seed** (ex.: "trocar", "material de consumo", "age",
+    "laboratório"): deixavam passar editais fora da saúde.
+30. **Chave de serviço do Supabase só no GitHub Actions**, como segredo. O app web continua
+    usando apenas a chave pública.
+
+## O que a API do PNCP mostrou (conferido em 22/11/2026)
+
+- **Busca** (`/api/search/`): aceita `modalidades=6|8` e `ufs=PR|SC`; devolve
+  `numero_controle_pncp`, `orgao_cnpj`, `ano`, `numero_sequencial`, `uf`, `situacao_id`,
+  `data_fim_vigencia` (igual à `dataEncerramentoProposta`), `description` (objeto) e
+  `valor_total_estimado`.
+- **Consulta** (`/api/consulta/v1/contratacoes/proposta` e `/orgaos/{cnpj}/compras/{ano}/{seq}`):
+  página de no máximo 50; campos `objetoCompra`, `dataEncerramentoProposta`,
+  `situacaoCompraId`, `unidadeOrgao.ufSigla`.
+- **Datas** vêm sem fuso, no horário de Brasília.
+- **Instabilidade:** no dia do desenvolvimento a API principal (`/api/pncp/v1`, itens e
+  arquivos) ficou horas devolvendo 503, e houve respostas vazias e timeouts esporádicos.
+
+## Pontos ainda a confirmar
+
+- **Campos dos itens** (`/api/pncp/v1/.../itens`): a API estava fora do ar durante o
+  desenvolvimento. O coletor usa os nomes da documentação do PNCP (`numeroItem`,
+  `descricao`, `quantidade`, `unidadeMedida`, `valorUnitarioEstimado`, `valorTotal`,
+  `tipoBeneficio`) e precisa ser conferido na primeira rodada real.
+- **Lote/grupo:** a documentação não traz um campo de lote por item. O coletor aceita vários
+  nomes possíveis; se nenhum vier, o alerta de "lote incompleto" dependerá do texto do edital.

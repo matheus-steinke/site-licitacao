@@ -31,6 +31,133 @@ export type Database = {
         }
         Relationships: []
       }
+      coletor_erros: {
+        Row: {
+          criado_em: string
+          etapa: string
+          id: string
+          mensagem: string
+          rodada_id: string
+          status_http: number | null
+          url: string | null
+        }
+        Insert: {
+          criado_em?: string
+          etapa: string
+          id?: string
+          mensagem: string
+          rodada_id: string
+          status_http?: number | null
+          url?: string | null
+        }
+        Update: {
+          criado_em?: string
+          etapa?: string
+          id?: string
+          mensagem?: string
+          rodada_id?: string
+          status_http?: number | null
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coletor_erros_rodada_id_fkey"
+            columns: ["rodada_id"]
+            isOneToOne: false
+            referencedRelation: "coletor_rodadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coletor_rodadas: {
+        Row: {
+          alteracoes: number
+          compras_atualizadas: number
+          compras_descartadas: number
+          compras_encontradas: number
+          compras_novas: number
+          compras_pendentes: number
+          erros: number
+          finalizado_em: string | null
+          fonte: string | null
+          id: string
+          iniciado_em: string
+          mensagem: string | null
+          origem: string
+          status: string
+          termos_buscados: number
+        }
+        Insert: {
+          alteracoes?: number
+          compras_atualizadas?: number
+          compras_descartadas?: number
+          compras_encontradas?: number
+          compras_novas?: number
+          compras_pendentes?: number
+          erros?: number
+          finalizado_em?: string | null
+          fonte?: string | null
+          id?: string
+          iniciado_em?: string
+          mensagem?: string | null
+          origem?: string
+          status?: string
+          termos_buscados?: number
+        }
+        Update: {
+          alteracoes?: number
+          compras_atualizadas?: number
+          compras_descartadas?: number
+          compras_encontradas?: number
+          compras_novas?: number
+          compras_pendentes?: number
+          erros?: number
+          finalizado_em?: string | null
+          fonte?: string | null
+          id?: string
+          iniciado_em?: string
+          mensagem?: string | null
+          origem?: string
+          status?: string
+          termos_buscados?: number
+        }
+        Relationships: []
+      }
+      compra_alteracoes: {
+        Row: {
+          campo: string
+          compra_id: string
+          detectado_em: string
+          id: string
+          valor_anterior: string | null
+          valor_novo: string | null
+        }
+        Insert: {
+          campo: string
+          compra_id: string
+          detectado_em?: string
+          id?: string
+          valor_anterior?: string | null
+          valor_novo?: string | null
+        }
+        Update: {
+          campo?: string
+          compra_id?: string
+          detectado_em?: string
+          id?: string
+          valor_anterior?: string | null
+          valor_novo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compra_alteracoes_compra_id_fkey"
+            columns: ["compra_id"]
+            isOneToOne: false
+            referencedRelation: "compras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compra_arquivos: {
         Row: {
           compra_id: string
@@ -68,6 +195,36 @@ export type Database = {
             columns: ["compra_id"]
             isOneToOne: false
             referencedRelation: "compras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compra_item_segmentos: {
+        Row: {
+          item_id: string
+          segmento_id: string
+        }
+        Insert: {
+          item_id: string
+          segmento_id: string
+        }
+        Update: {
+          item_id?: string
+          segmento_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compra_item_segmentos_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "compra_itens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compra_item_segmentos_segmento_id_fkey"
+            columns: ["segmento_id"]
+            isOneToOne: false
+            referencedRelation: "segmentos"
             referencedColumns: ["id"]
           },
         ]
@@ -134,6 +291,7 @@ export type Database = {
       compras: {
         Row: {
           ano: number
+          area_saude: boolean | null
           atualizado_em: string
           codigo_ibge: string | null
           coletado_em: string
@@ -143,6 +301,7 @@ export type Database = {
           data_publicacao: string | null
           exemplo: boolean
           id: string
+          itens_coletados_em: string | null
           link_sistema_origem: string | null
           modalidade_id: number
           modalidade_nome: string
@@ -151,18 +310,23 @@ export type Database = {
           numero_compra: string | null
           objeto: string
           orgao_cnpj: string
+          pncp_atualizado_em: string | null
           processo: string | null
+          segmento_ids: string[]
           sequencial: number
           situacao_id: number
           srp: boolean | null
+          tentativas_itens: number
           texto_edital: string | null
           uf: string
           unidade_codigo: string | null
           unidade_nome: string | null
           valor_total_estimado: number | null
+          verificado_em: string | null
         }
         Insert: {
           ano: number
+          area_saude?: boolean | null
           atualizado_em?: string
           codigo_ibge?: string | null
           coletado_em?: string
@@ -172,6 +336,7 @@ export type Database = {
           data_publicacao?: string | null
           exemplo?: boolean
           id?: string
+          itens_coletados_em?: string | null
           link_sistema_origem?: string | null
           modalidade_id: number
           modalidade_nome: string
@@ -180,18 +345,23 @@ export type Database = {
           numero_compra?: string | null
           objeto: string
           orgao_cnpj: string
+          pncp_atualizado_em?: string | null
           processo?: string | null
+          segmento_ids?: string[]
           sequencial: number
           situacao_id?: number
           srp?: boolean | null
+          tentativas_itens?: number
           texto_edital?: string | null
           uf: string
           unidade_codigo?: string | null
           unidade_nome?: string | null
           valor_total_estimado?: number | null
+          verificado_em?: string | null
         }
         Update: {
           ano?: number
+          area_saude?: boolean | null
           atualizado_em?: string
           codigo_ibge?: string | null
           coletado_em?: string
@@ -201,6 +371,7 @@ export type Database = {
           data_publicacao?: string | null
           exemplo?: boolean
           id?: string
+          itens_coletados_em?: string | null
           link_sistema_origem?: string | null
           modalidade_id?: number
           modalidade_nome?: string
@@ -209,15 +380,19 @@ export type Database = {
           numero_compra?: string | null
           objeto?: string
           orgao_cnpj?: string
+          pncp_atualizado_em?: string | null
           processo?: string | null
+          segmento_ids?: string[]
           sequencial?: number
           situacao_id?: number
           srp?: boolean | null
+          tentativas_itens?: number
           texto_edital?: string | null
           uf?: string
           unidade_codigo?: string | null
           unidade_nome?: string | null
           valor_total_estimado?: number | null
+          verificado_em?: string | null
         }
         Relationships: [
           {
@@ -651,6 +826,10 @@ export type Database = {
     }
     Functions: {
       aceitar_convite: { Args: { p_convite: string }; Returns: string }
+      coletor_gravar_compra: {
+        Args: { p_arquivos?: Json; p_compra: Json; p_itens?: Json }
+        Returns: Json
+      }
       criar_organizacao: {
         Args: {
           p_cnpj: string

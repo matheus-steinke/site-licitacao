@@ -13,7 +13,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 1 | Base: projeto, banco com RLS, login, menu, seed, páginas LGPD | Pronta |
 | 2 | Onboarding, Configurações, usuários, admin de segmentos | Pronta |
 | 3 | Catálogo e importação de Excel/CSV | Pronta |
-| 4 | Coletor do PNCP | A fazer |
+| 4 | Coletor do PNCP | Pronta |
 | 5 | Triagem e Oportunidades | A fazer |
 | 6 | Busca | A fazer |
 | 7 | Dashboard | A fazer |
@@ -69,6 +69,7 @@ como segredo do GitHub Actions.
 | `pnpm lint` / `pnpm typecheck` | ESLint e checagem de tipos |
 | `pnpm test` | Testes unitários (Vitest) |
 | `pnpm test:db` | Aplica migrations e seed num Postgres local descartável e testa as regras de RLS |
+| `pnpm coletor` | Roda uma rodada do coletor do PNCP (veja a seção Coletor) |
 
 `pnpm test:db` precisa de um Postgres 15+ local com as extensões `pg_trgm` e `unaccent`
 e de um usuário com permissão para criar bancos. Ele usa
@@ -94,7 +95,8 @@ supabase link --project-ref SEU_PROJECT_REF
 supabase db push
 ```
 
-Remover os dados de exemplo quando houver dados reais:
+As licitações de exemplo deixam de aparecer para os clientes assim que o coletor grava a
+primeira licitação real. Para apagá-las do banco:
 
 ```sql
 delete from public.compras where exemplo;
@@ -119,7 +121,10 @@ Dados globais:
 | Tabela | Visitante | Usuário logado | Admin da plataforma | Coletor (service role) |
 |---|---|---|---|---|
 | `segmentos` | nada | lê | lê e edita | tudo |
-| `orgaos`, `compras`, `compra_itens`, `compra_arquivos` | nada | lê | lê | tudo |
+| `orgaos`, `compra_itens`, `compra_arquivos` | nada | lê | lê | tudo |
+| `compras` | nada | lê só as da área da saúde | lê todas | tudo |
+| `compra_item_segmentos`, `compra_alteracoes` | nada | lê | lê | tudo |
+| `coletor_rodadas`, `coletor_erros` | nada | nada | lê | tudo |
 | `admins_plataforma` | nada | vê só a própria linha | vê só a própria linha | tudo |
 
 Dados por organização (um usuário só enxerga a própria organização):
@@ -187,6 +192,78 @@ O bucket `produtos` e as regras de acesso dele são criados pela migration do ca
 Bibliotecas de planilha: `read-excel-file`, `write-excel-file` e `papaparse` (em vez do
 pacote `xlsx` do npm, que está parado numa versão com vulnerabilidades conhecidas).
 
+## Coletor do PNCP
+
+O coletor é um script Node/TypeScript ([`coletor/`](coletor)) que roda a cada 2 horas pelo
+GitHub Actions ([`.github/workflows/coletor.yml`](.github/workflows/coletor.yml)). Ele é
+global: coleta uma vez e todos os clientes enxergam.
+
+### O que cada rodada faz
+
+1. **Descobre editais** pela busca do PNCP, com as palavras-chave de todos os segmentos
+   ativos (cada termo entre aspas), só Pregão Eletrônico e Dispensa, só "recebendo proposta".
+   Ficam os que têm disputa de hoje até hoje + 30 dias.
+2. **Baixa os itens** de cada edital novo e compara cada item com os segmentos (palavras-chave,
+   sinônimos e exclusões). Só entra para os clientes o edital com **pelo menos um item da
+   saúde**; os demais ficam marcados como descartados, sem itens, apenas para não serem
+   baixados de novo. Dos que entram, baixa também a lista de arquivos.
+3. **Atualiza o que já conhece:** situação e data mudam? Grava o histórico em
+   `compra_alteracoes` (adiada, suspensa, revogada). Editais que sumiram da busca são
+   conferidos um a um pelo endpoint de detalhe.
+4. **Registra a rodada** em `coletor_rodadas` e cada falha em `coletor_erros`. O painel
+   Admin > Rodadas do coletor mostra tudo.
+
+Cuidados com o PNCP, que cai com frequência:
+
+- Pausa de 300 ms entre chamadas, no máximo 4 em paralelo, tempo limite de 30 s.
+- Até 4 tentativas por chamada, com espera crescente, para erro de rede, 429 e 5xx.
+- **Plano B:** se a busca estiver fora do ar, lista todas as contratações com proposta aberta
+  (`/api/consulta/v1/contratacoes/proposta`) e filtra pelo objeto. É mais pesado e menos
+  preciso (não enxerga os itens antes de baixar), por isso só entra quando a busca falha.
+- **Itens fora do ar:** depois de 5 falhas seguidas o coletor para de insistir, guarda os
+  editais como pendentes (invisíveis para os clientes) e tenta de novo na rodada seguinte.
+- Sem duplicar: a chave é o Controle PNCP (`{cnpj}-1-{sequencial com 6 dígitos}/{ano}`), e a
+  gravação de cada edital é uma transação (`coletor_gravar_compra`).
+- Limites por rodada: 1.500 editais com itens baixados e 45 minutos. O que sobrar fica para
+  a seguinte, começando pelas disputas mais próximas.
+
+Uma rodada **parcial** (parte das chamadas falhou) não é falha: o que faltou entra na
+próxima. Só termina como **erro** quando não consegue consultar o PNCP de jeito nenhum.
+
+### Configurar o agendamento (uma vez)
+
+No GitHub, em Settings > Secrets and variables > Actions do repositório:
+
+1. Aba **Secrets** > New repository secret: `SUPABASE_SERVICE_ROLE_KEY`, com a chave
+   `service_role` (ou "secret key") do Supabase, em Project Settings > API Keys. Essa chave
+   ignora o RLS: nunca a coloque no código, no `.env.example` nem na Vercel.
+2. Aba **Variables** > New repository variable: `SUPABASE_URL`, com
+   `https://SEU-PROJETO.supabase.co`.
+
+Depois, em Actions > Coletor do PNCP > Run workflow, dispare a primeira rodada. Para um teste
+rápido, preencha "termos" com 5.
+
+Atenção: em repositório público, o GitHub desativa workflows agendados após 60 dias sem
+atividade no repositório. Basta reativar em Actions.
+
+### Rodar na sua máquina
+
+```bash
+SUPABASE_URL=https://SEU-PROJETO.supabase.co SUPABASE_SERVICE_ROLE_KEY=... pnpm coletor --manual --termos 5
+```
+
+Opções: `--fonte busca|plano_b`, `--termos N` (só os N primeiros termos) e
+`--simular segmentos.json` (não grava nada; lê os segmentos de um arquivo JSON). Ajustes por
+variável de ambiente: `COLETOR_PAUSA_MS`, `COLETOR_PARALELAS`, `COLETOR_MAX_COMPRAS` e
+`COLETOR_MINUTOS`.
+
+### Casamento de texto (sem IA)
+
+O mesmo código ([`src/lib/texto`](src/lib/texto)) serve ao coletor e servirá à triagem:
+minúsculas, sem acento, sem pontuação, sem preposições e no singular. Um termo casa quando
+todas as palavras dele aparecem inteiras e próximas no texto, em qualquer ordem. Assim
+"cateter duplo j" casa com "CATETER URETERAL DUPLO J 6FR", e "uti" não casa com "utilizado".
+
 ## Painel ADMIN
 
 Disponível para quem está em `admins_plataforma`, pelo item "Admin" do menu:
@@ -195,7 +272,9 @@ Disponível para quem está em `admins_plataforma`, pelo item "Admin" do menu:
   linha; vírgula não separa termos, por causa de medidas como "0,035"). Segmento escolhido
   por alguma organização não pode ser excluído, só desativado.
 - **Organizações:** empresas cadastradas, com porte, plano, estados, segmentos e usuários.
-- **Rodadas do coletor:** chega na etapa 4.
+- **Rodadas do coletor:** as últimas rodadas com situação, duração, fonte (busca ou plano
+  B) e contagens; cada rodada abre a lista de erros. No topo, quantas licitações da saúde
+  estão no banco, quantas aguardam itens e quantas foram descartadas.
 
 ## Configurar o login no Supabase
 
@@ -261,6 +340,9 @@ src/app/auth/          ações de login e rotas de retorno do Supabase
 src/components/        componentes (ui/ = shadcn)
 src/lib/               Supabase, autenticação, formatação, acesso a dados
 src/lib/importacao/    leitura e validação da tabela de preços (Excel/CSV)
+src/lib/texto/         normalização e casamento de termos (coletor e triagem)
+coletor/               coletor do PNCP (roda no GitHub Actions)
+.github/workflows/     agendamento do coletor
 src/proxy.ts           renova a sessão e redireciona visitantes para o login
 ```
 
