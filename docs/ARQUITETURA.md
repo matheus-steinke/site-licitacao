@@ -116,6 +116,27 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 14. **Admin sem empresa** acessa o painel Admin normalmente, mas precisa passar pelo
     onboarding para usar as telas de cliente.
 
+## Decisões tomadas na etapa 3
+
+15. **Qualquer membro mantém o catálogo** (produtos, importação, arquivos, exclusões), não só
+    o responsável. Dados da empresa e usuários continuam só com o responsável.
+16. **Planilhas sem o pacote `xlsx` do npm:** ele está parado na versão 0.18.5, com
+    vulnerabilidades conhecidas (as correções só saem pelo CDN do SheetJS). Usamos
+    `read-excel-file`, `write-excel-file` e `papaparse`.
+17. **A planilha é lida no navegador** para a prévia, e as células seguem para o servidor,
+    que valida tudo de novo com o mesmo código antes de gravar.
+18. **Importação atômica** pela função `importar_produtos` do banco. O id interno do produto
+    não muda numa atualização, então arquivos e vínculos futuros (oportunidades) se mantêm.
+19. **ID repetido na planilha:** nenhuma das linhas repetidas entra, para não gravar a errada.
+20. **"Substituir tudo" preserva** os produtos cujas linhas vieram com erro (não exclui por
+    causa de um erro de digitação) e exige confirmar a quantidade a excluir.
+21. **Upload direto do navegador para o Storage**, porque a Vercel limita o corpo das
+    requisições a 4,5 MB. Pelo mesmo motivo a importação aceita até 5.000 produtos por vez.
+22. **Edição de produto numa página própria**, não em células da tabela: funciona melhor no
+    celular e comporta os campos opcionais e os arquivos.
+23. **Busca do catálogo** ainda diferencia acentos ("canula" não acha "cânula"). A busca sem
+    acento entra na etapa 6, junto com a busca de licitações.
+
 ## Pontos a confirmar durante a construção
 
 - Nomes reais dos campos da API do PNCP (etapa 4).

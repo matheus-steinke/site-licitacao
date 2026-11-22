@@ -1,5 +1,5 @@
 -- Testes de RLS da etapa 2: isolamento entre organizações, papéis e convites.
--- Roda depois de rls_base.sql (usa o admin ...0a e o cliente sem empresa ...0b).
+-- Roda depois de rls_1_base.sql (usa o admin ...0a e o cliente sem empresa ...0b).
 
 insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
   ('00000000-0000-0000-0000-0000000000c1', 'dono-a@exemplo.test', now(), '{"nome":"Dono A"}'),

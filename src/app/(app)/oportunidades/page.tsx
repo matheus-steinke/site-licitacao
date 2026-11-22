@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { CalendarClock, FlaskConical, MapPin } from "lucide-react";
+import { CalendarClock, FlaskConical, MapPin, PackageOpen } from "lucide-react";
 import Link from "next/link";
 
 import { CabecalhoPagina } from "@/components/app/cabecalho-pagina";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { contarProdutos } from "@/lib/dados/catalogo";
 import { listarCompras, SITUACOES, type CompraResumo } from "@/lib/dados/compras";
 import { exigirOrganizacao } from "@/lib/organizacao";
 import { formatarDataHora, formatarDiaSemana, formatarMoeda } from "@/lib/formato";
@@ -58,7 +59,10 @@ function CartaoCompra({ compra }: { compra: CompraResumo }) {
 
 export default async function PaginaOportunidades() {
   const { org } = await exigirOrganizacao();
-  const compras = await listarCompras(org.ufs);
+  const [compras, totalProdutos] = await Promise.all([
+    listarCompras(org.ufs),
+    contarProdutos(org.id),
+  ]);
   const soExemplos = compras.length > 0 && compras.every((c) => c.exemplo);
 
   return (
@@ -75,6 +79,20 @@ export default async function PaginaOportunidades() {
           Alterar
         </Link>
       </p>
+
+      {totalProdutos === 0 ? (
+        <Alert className="mb-4">
+          <PackageOpen aria-hidden />
+          <AlertTitle>Seu catálogo está vazio</AlertTitle>
+          <AlertDescription>
+            Sem a tabela de preços não dá para comparar os itens das licitações com os seus
+            produtos.{" "}
+            <Link href="/catalogo/importar" className="font-medium text-foreground underline">
+              Subir a tabela agora
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {soExemplos ? (
         <Alert className="mb-4">

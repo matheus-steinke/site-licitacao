@@ -267,6 +267,62 @@ export type Database = {
           },
         ]
       }
+      importacoes: {
+        Row: {
+          alterados: number
+          arquivo_nome: string
+          com_erro: number
+          criado_em: string
+          excluidos: number
+          id: string
+          incluidos: number
+          modo: string
+          org_id: string
+          relatorio: Json
+          sem_mudanca: number
+          total_linhas: number
+          user_id: string | null
+        }
+        Insert: {
+          alterados?: number
+          arquivo_nome: string
+          com_erro?: number
+          criado_em?: string
+          excluidos?: number
+          id?: string
+          incluidos?: number
+          modo: string
+          org_id: string
+          relatorio?: Json
+          sem_mudanca?: number
+          total_linhas?: number
+          user_id?: string | null
+        }
+        Update: {
+          alterados?: number
+          arquivo_nome?: string
+          com_erro?: number
+          criado_em?: string
+          excluidos?: number
+          id?: string
+          incluidos?: number
+          modo?: string
+          org_id?: string
+          relatorio?: Json
+          sem_mudanca?: number
+          total_linhas?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "importacoes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       membros: {
         Row: {
           criado_em: string
@@ -295,6 +351,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "membros_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizacao_exclusoes: {
+        Row: {
+          criado_em: string
+          id: string
+          org_id: string
+          termo: string
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          org_id: string
+          termo: string
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          org_id?: string
+          termo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organizacao_exclusoes_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizacoes"
@@ -398,6 +483,129 @@ export type Database = {
         }
         Relationships: []
       }
+      produto_arquivos: {
+        Row: {
+          caminho: string
+          criado_em: string
+          enviado_por: string | null
+          id: string
+          nome: string
+          org_id: string
+          produto_id: string
+          tamanho: number
+          tipo: string
+          tipo_mime: string | null
+        }
+        Insert: {
+          caminho: string
+          criado_em?: string
+          enviado_por?: string | null
+          id?: string
+          nome: string
+          org_id: string
+          produto_id: string
+          tamanho: number
+          tipo: string
+          tipo_mime?: string | null
+        }
+        Update: {
+          caminho?: string
+          criado_em?: string
+          enviado_por?: string | null
+          id?: string
+          nome?: string
+          org_id?: string
+          produto_id?: string
+          tamanho?: number
+          tipo?: string
+          tipo_mime?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produto_arquivos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produto_arquivos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      produtos: {
+        Row: {
+          atualizado_em: string
+          codigo: string
+          criado_em: string
+          fabricante: string | null
+          id: string
+          lance_minimo: number
+          marca: string | null
+          medidas: string | null
+          nome: string
+          org_id: string
+          palavras_chave: string[]
+          preco_proposta: number
+          referencia: string
+          registro_anvisa: string | null
+          segmento_id: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          codigo: string
+          criado_em?: string
+          fabricante?: string | null
+          id?: string
+          lance_minimo: number
+          marca?: string | null
+          medidas?: string | null
+          nome: string
+          org_id: string
+          palavras_chave?: string[]
+          preco_proposta: number
+          referencia: string
+          registro_anvisa?: string | null
+          segmento_id?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          codigo?: string
+          criado_em?: string
+          fabricante?: string | null
+          id?: string
+          lance_minimo?: number
+          marca?: string | null
+          medidas?: string | null
+          nome?: string
+          org_id?: string
+          palavras_chave?: string[]
+          preco_proposta?: number
+          referencia?: string
+          registro_anvisa?: string | null
+          segmento_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produtos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produtos_segmento_id_fkey"
+            columns: ["segmento_id"]
+            isOneToOne: false
+            referencedRelation: "segmentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       segmentos: {
         Row: {
           ativo: boolean
@@ -454,6 +662,15 @@ export type Database = {
       definir_segmentos_organizacao: {
         Args: { p_org: string; p_segmentos: string[] }
         Returns: undefined
+      }
+      importar_produtos: {
+        Args: {
+          p_linhas: Json
+          p_manter?: string[]
+          p_modo: string
+          p_org: string
+        }
+        Returns: Json
       }
       meus_convites: {
         Args: never

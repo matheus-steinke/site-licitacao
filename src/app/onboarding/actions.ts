@@ -40,7 +40,12 @@ export async function passoSegmentos(
   redirect("/onboarding?passo=tabela");
 }
 
-export async function concluirOnboarding(): Promise<EstadoFormulario> {
+export async function concluirOnboarding(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  // "Pular e fazer depois" envia destino=pular; o botão principal leva à importação.
+  const destino = formData.get("destino") === "pular" ? "/oportunidades" : "/catalogo/importar";
   const atual = await obterOrganizacao();
   if (!atual) redirect("/onboarding");
   if (atual.ehDono && !atual.org.onboarding_concluido_em) {
@@ -54,7 +59,7 @@ export async function concluirOnboarding(): Promise<EstadoFormulario> {
       return { erro: "Não foi possível concluir. Tente de novo em instantes." };
     }
   }
-  redirect("/oportunidades");
+  redirect(destino);
 }
 
 export async function aceitarConvite(

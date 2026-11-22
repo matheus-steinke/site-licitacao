@@ -12,7 +12,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 |---|---|---|
 | 1 | Base: projeto, banco com RLS, login, menu, seed, páginas LGPD | Pronta |
 | 2 | Onboarding, Configurações, usuários, admin de segmentos | Pronta |
-| 3 | Catálogo e importação de Excel/CSV | A fazer |
+| 3 | Catálogo e importação de Excel/CSV | Pronta |
 | 4 | Coletor do PNCP | A fazer |
 | 5 | Triagem e Oportunidades | A fazer |
 | 6 | Busca | A fazer |
@@ -130,6 +130,10 @@ Dados por organização (um usuário só enxerga a própria organização):
 | `membros` | lê | lê e remove outros membros | lê todos |
 | `convites` | nada | lê, cria e cancela | nada |
 | `organizacao_segmentos` | lê | lê e altera | lê todos |
+| `produtos`, `organizacao_exclusoes` | lê e altera | lê e altera | nada |
+| `produto_arquivos` | lê, inclui e exclui | lê, inclui e exclui | nada |
+| `importacoes` | lê e registra | lê e registra | nada |
+| Storage `produtos` (arquivos) | só a pasta da própria organização | idem | nada |
 
 Criação de organização e aceite de convite passam por funções do banco
 (`criar_organizacao`, `aceitar_convite`), que conferem o usuário logado. Ninguém insere
@@ -148,6 +152,40 @@ direto nessas tabelas.
   confirmado, vê o convite e aceita. Convites valem 14 dias.
 - Só o responsável altera dados da empresa, estados, segmentos e usuários. Os membros
   consultam.
+
+## Catálogo e tabela de preços
+
+Menu **Catálogo**, disponível para qualquer usuário da empresa:
+
+- **Produtos:** lista com busca (ID, referência, produto, marca), inclusão, edição e exclusão.
+  Obrigatórios: ID, referência, produto, preço proposta e lance mínimo. Opcionais: segmento,
+  palavras-chave/sinônimos, medidas, marca, fabricante e registro ANVISA.
+- **Importar tabela:** aceita `.xlsx` e `.csv` (separado por ponto e vírgula ou vírgula, em
+  UTF-8 ou no padrão do Excel brasileiro). Há modelos para download nos dois formatos.
+  - A planilha é lida no navegador e mostrada numa prévia linha a linha antes de gravar.
+  - Colunas são reconhecidas pelo título, em qualquer ordem, sem ligar para acentos; colunas
+    desconhecidas são ignoradas e avisadas.
+  - Preços aceitam vírgula ou ponto (`1.234,56`, `1234.56`, `R$ 98,5`).
+  - **Erros** (a linha não entra): campo obrigatório vazio, preço que não é número, ID
+    repetido na planilha (nenhuma das linhas repetidas entra).
+  - **Avisos** (a linha entra): lance mínimo maior que o preço, preço zero, segmento não
+    reconhecido, número ambíguo como `1.234`.
+  - **Atualizar pelo ID** inclui os novos e atualiza os existentes. **Substituir tudo** também
+    exclui o que não está na planilha, depois de uma confirmação com a quantidade.
+  - Ao final, relatório do que foi incluído, alterado, ficou sem mudança, foi excluído e deu
+    erro, com download da lista de linhas com problema. As últimas importações ficam na tela.
+  - Limites: 5.000 produtos e 10 MB por arquivo. A gravação é uma transação só: ou entra
+    tudo o que é válido, ou nada.
+- **Arquivos por produto:** PDF, PNG ou JPG de até 20 MB (catálogo técnico, registro ANVISA,
+  outro). O arquivo vai direto do navegador para o Supabase Storage (bucket privado
+  `produtos`, pasta `{organização}/{produto}/`), e o download usa um link temporário de 60
+  segundos. Excluir o produto apaga os arquivos dele.
+- **Exclusões:** termos que a empresa não fornece (um por linha). Serão usados na triagem
+  (etapa 5): item de licitação com o termo não casa com o catálogo.
+
+O bucket `produtos` e as regras de acesso dele são criados pela migration do catálogo.
+Bibliotecas de planilha: `read-excel-file`, `write-excel-file` e `papaparse` (em vez do
+pacote `xlsx` do npm, que está parado numa versão com vulnerabilidades conhecidas).
 
 ## Painel ADMIN
 
@@ -222,6 +260,7 @@ src/app/(app)/         área logada (menu + telas), incluindo admin/
 src/app/auth/          ações de login e rotas de retorno do Supabase
 src/components/        componentes (ui/ = shadcn)
 src/lib/               Supabase, autenticação, formatação, acesso a dados
+src/lib/importacao/    leitura e validação da tabela de preços (Excel/CSV)
 src/proxy.ts           renova a sessão e redireciona visitantes para o login
 ```
 

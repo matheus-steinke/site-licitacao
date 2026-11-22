@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
+import { BotaoEnviar } from "@/components/formulario/botao-enviar";
 import { FormularioAcao } from "@/components/formulario/formulario-acao";
 import { CamposEmpresa } from "@/components/organizacao/campos-empresa";
 import { SeletorSegmentos } from "@/components/organizacao/seletor-segmentos";
@@ -208,15 +209,25 @@ async function Conteudo({ searchParams }: { searchParams: Promise<{ passo?: stri
           <CardContent>
             <FormularioAcao
               acao={concluirOnboarding}
-              rotulo="Concluir e ver as licitações"
-              aoLado={<Voltar para="segmentos" />}
+              rotulo="Subir a tabela agora"
+              aoLado={
+                <span className="flex flex-wrap items-center gap-1">
+                  <Voltar para="segmentos" />
+                  <BotaoEnviar variant="ghost" size="lg" name="destino" value="pular">
+                    Pular e fazer depois
+                  </BotaoEnviar>
+                </span>
+              }
             >
               <div className="flex items-start gap-3 rounded-lg border border-dashed p-4 text-sm">
                 <FileSpreadsheet className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden />
                 <p className="text-muted-foreground">
-                  A importação da tabela (Excel ou CSV) chega na próxima etapa do app, no menu
-                  <span className="font-medium text-foreground"> Catálogo</span>. Por enquanto,
-                  conclua o cadastro e suba a tabela depois.
+                  No próximo passo você envia a planilha (Excel ou CSV) com
+                  <span className="font-medium text-foreground">
+                    {" "}
+                    ID, referência, produto, preço proposta e lance mínimo
+                  </span>
+                  , confere a prévia e confirma. Se preferir, pule e faça depois no menu Catálogo.
                 </p>
               </div>
             </FormularioAcao>
