@@ -29,7 +29,6 @@ function numero(valor: string | undefined, padrao: number): number {
 /** Detecta os enganos mais comuns ao colar a chave, sem nunca imprimir o valor. */
 export function problemaNaChave(chave: string): string | null {
   if (/[•*…]|\.{3}/.test(chave)) return "o valor está mascarado (tem •••• ou ...); use o botão de revelar/copiar.";
-  if (/\s/.test(chave)) return "o valor tem espaço ou quebra de linha no meio.";
   if (chave.startsWith("sb_publishable_")) return "esta é a chave pública (sb_publishable_); use a secreta (sb_secret_).";
   if (chave.startsWith("sb_secret_")) return chave.length < 30 ? "o valor parece cortado." : null;
   if (chave.startsWith("eyJ")) {
@@ -84,9 +83,10 @@ async function principal() {
     return;
   }
 
-  // Espaço ou quebra de linha sobrando (comum ao colar a chave) invalidam a chave.
+  // Uma chave do Supabase nunca tem espaço nem quebra de linha; se vieram ao colar
+  // (inclusive no meio, quando a chave quebra em duas linhas), são removidos.
   const url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
-  const chave = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  const chave = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").replace(/\s+/g, "");
   if (!url || !chave) {
     console.error("Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY (veja o README, seção Coletor).");
     process.exitCode = 1;
