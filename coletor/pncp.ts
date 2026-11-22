@@ -19,6 +19,8 @@ export type OpcoesCliente = {
   pausaMs?: number;
   /** Tempo limite de cada tentativa, em ms. */
   timeoutMs?: number;
+  /** Folga do limite duro sobre o tempo limite, em ms. */
+  folgaDoLimiteMs?: number;
   /** Tentativas por chamada (a primeira conta). */
   tentativas?: number;
   /** Espera antes da 2ª tentativa; dobra a cada nova tentativa. */
@@ -36,11 +38,29 @@ function valeTentarDeNovo(status: number | undefined): boolean {
   return status === undefined || status === 408 || status === 429 || status >= 500;
 }
 
+/** Rejeita se a tarefa não terminar no prazo. */
+function comLimite<T>(ms: number, tarefa: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const relogio = setTimeout(() => reject(new Error("tempo esgotado")), ms);
+    tarefa().then(
+      (valor) => {
+        clearTimeout(relogio);
+        resolve(valor);
+      },
+      (erro) => {
+        clearTimeout(relogio);
+        reject(erro);
+      },
+    );
+  });
+}
+
 export type ClientePncp = ReturnType<typeof criarClientePncp>;
 
 export function criarClientePncp(opcoes: OpcoesCliente = {}) {
   const pausaMs = opcoes.pausaMs ?? 300;
   const timeoutMs = opcoes.timeoutMs ?? 30_000;
+  const folgaDoLimiteMs = opcoes.folgaDoLimiteMs ?? 5000;
   const tentativas = opcoes.tentativas ?? 4;
   const esperaInicialMs = opcoes.esperaInicialMs ?? 1500;
   const buscar = opcoes.fetch ?? fetch;
@@ -66,18 +86,22 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
       chamadas++;
       let status: number | undefined;
       try {
-        const resposta = await buscar(url, {
-          headers: {
-            Accept: "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; coletor-licitacoes/1.0)",
-          },
-          signal: AbortSignal.timeout(timeoutMs),
+        // Além do tempo limite da requisição, um limite duro: garante que nenhuma
+        // chamada fique pendurada para sempre, aconteça o que acontecer na conexão.
+        const { resposta, texto } = await comLimite(timeoutMs + folgaDoLimiteMs, async () => {
+          const r = await buscar(url, {
+            headers: {
+              Accept: "application/json",
+              "User-Agent": "Mozilla/5.0 (compatible; coletor-licitacoes/1.0)",
+            },
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          return { resposta: r, texto: r.status === 204 ? "" : await r.text() };
         });
         status = resposta.status;
         // 204 = consulta válida sem resultados.
         if (status === 204) return undefined as T;
         if (!resposta.ok) throw new ErroPncp(`HTTP ${status}`, url, status);
-        const texto = await resposta.text();
         if (!texto.trim()) return undefined as T;
         try {
           return JSON.parse(texto) as T;
@@ -88,7 +112,7 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
         const mensagem =
           erro instanceof ErroPncp
             ? erro.message
-            : erro instanceof Error && erro.name === "TimeoutError"
+            : erro instanceof Error && (erro.name === "TimeoutError" || erro.message === "tempo esgotado")
               ? `sem resposta em ${timeoutMs / 1000}s`
               : erro instanceof Error
                 ? erro.message

@@ -107,6 +107,7 @@ describe("limite duro de tempo", () => {
     const cliente = criarClientePncp({
       pausaMs: 0,
       timeoutMs: 20,
+      folgaDoLimiteMs: 20,
       tentativas: 2,
       esperaInicialMs: 1,
       dormir: async () => {},
@@ -118,5 +119,5 @@ describe("limite duro de tempo", () => {
     });
     await expect(cliente.obterJson("/x")).rejects.toMatchObject({ message: expect.stringContaining("sem resposta") });
     expect(chamadas).toBe(2);
-  }, 20_000);
+  });
 });
