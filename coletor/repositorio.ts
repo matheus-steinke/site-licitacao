@@ -60,6 +60,51 @@ export interface Repositorio {
   listarPendentes(desde: string, antesDe: string, limite: number): Promise<CompraParaVerificar[]>;
 }
 
+/**
+ * Deixa uma mensagem de erro curta e numa linha só. Quando o Supabase está
+ * instável, a "mensagem" chega como uma página HTML inteira da rede dele.
+ */
+export function resumirErro(mensagem: string): string {
+  const titulo = /<title>([^<]*)<\/title>/i.exec(mensagem)?.[1];
+  const texto = titulo ? `resposta HTML: ${titulo}` : mensagem;
+  return texto.replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
+type RespostaDoBanco<T> = { data: T; error: { message: string; code?: string } | null; status?: number };
+
+/** Falha passageira: rede, tempo limite, 5xx ou página de erro no lugar do JSON. */
+export function falhaPassageira(resposta: { error: { message: string } | null; status?: number }): boolean {
+  if (!resposta.error) return false;
+  const status = resposta.status ?? 0;
+  return (
+    status === 0 ||
+    status === 408 ||
+    status === 429 ||
+    status >= 500 ||
+    /<html|<!doctype|fetch failed|timed? ?out|ECONNRESET|socket hang up/i.test(resposta.error.message)
+  );
+}
+
+/** Repete a operação no banco quando a falha é passageira (até 4 tentativas). */
+export async function tentarNoBanco<T>(
+  operacao: () => PromiseLike<RespostaDoBanco<T>>,
+  dormir: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  tentativas = 4,
+): Promise<RespostaDoBanco<T>> {
+  let resposta: RespostaDoBanco<T> | undefined;
+  for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
+    try {
+      resposta = await operacao();
+    } catch (erro) {
+      // O cliente do Supabase costuma devolver o erro, mas falhas de rede podem estourar.
+      resposta = { data: null as T, error: { message: erro instanceof Error ? erro.message : String(erro) }, status: 0 };
+    }
+    if (!falhaPassageira(resposta) || tentativa === tentativas) break;
+    await dormir(1000 * 2 ** (tentativa - 1));
+  }
+  return resposta!;
+}
+
 // ---------------------------------------------------------------------------
 // Supabase
 // ---------------------------------------------------------------------------
@@ -69,7 +114,7 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
   });
 
   const falhar = (acao: string, mensagem: string): never => {
-    throw new Error(`Banco (${acao}): ${mensagem}`);
+    throw new Error(`Banco (${acao}): ${resumirErro(mensagem)}`);
   };
 
   async function listarCompras(
@@ -85,61 +130,72 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
       .gte("data_disputa", desde)
       .or(`verificado_em.is.null,verificado_em.lt.${antesDe}`);
     consulta = filtro === "saude" ? consulta.eq("area_saude", true) : consulta.is("area_saude", null);
-    const { data, error } = await consulta
-      .order("verificado_em", { ascending: true, nullsFirst: true })
-      .limit(limite);
+    const { data, error } = await tentarNoBanco(() =>
+      consulta.order("verificado_em", { ascending: true, nullsFirst: true }).limit(limite),
+    );
     if (error) falhar("listar compras", error.message);
     return data ?? [];
   }
 
   return {
     async listarSegmentosAtivos() {
-      const { data, error } = await supabase
-        .from("segmentos")
-        .select("id, nome, palavras_chave, sinonimos, exclusoes")
-        .eq("ativo", true)
-        .order("ordem");
+      const { data, error } = await tentarNoBanco(() =>
+        supabase
+          .from("segmentos")
+          .select("id, nome, palavras_chave, sinonimos, exclusoes")
+          .eq("ativo", true)
+          .order("ordem"),
+      );
       if (error) falhar("segmentos", error.message);
       return data ?? [];
     },
 
     async iniciarRodada(origem) {
-      const { data, error } = await supabase
-        .from("coletor_rodadas")
-        .insert({ origem })
-        .select("id")
-        .single();
+      const { data, error } = await tentarNoBanco(() =>
+        supabase.from("coletor_rodadas").insert({ origem }).select("id").single(),
+      );
       if (error || !data) return falhar("iniciar rodada", error?.message ?? "sem resposta");
       return data.id;
     },
 
     async registrarErro(rodadaId, erro) {
-      const { error } = await supabase.from("coletor_erros").insert({
-        rodada_id: rodadaId,
-        etapa: erro.etapa,
-        url: erro.url ?? null,
-        status_http: erro.status_http ?? null,
-        mensagem: erro.mensagem.slice(0, 1000),
-      });
+      const { error } = await tentarNoBanco(() =>
+        supabase.from("coletor_erros").insert({
+          rodada_id: rodadaId,
+          etapa: erro.etapa,
+          url: erro.url ?? null,
+          status_http: erro.status_http ?? null,
+          mensagem: resumirErro(erro.mensagem),
+        }),
+      );
       // Falhar ao registrar um erro não pode derrubar a rodada.
-      if (error) console.error("não consegui registrar o erro:", error.message);
+      if (error) console.error("não consegui registrar o erro:", resumirErro(error.message));
     },
 
     async finalizarRodada(rodadaId, totais) {
-      const { error } = await supabase
-        .from("coletor_rodadas")
-        .update({ ...totais, finalizado_em: new Date().toISOString() })
-        .eq("id", rodadaId);
+      const { error } = await tentarNoBanco(() =>
+        supabase
+          .from("coletor_rodadas")
+          .update({
+            ...totais,
+            mensagem: totais.mensagem ? totais.mensagem.slice(0, 1000) : null,
+            finalizado_em: new Date().toISOString(),
+          })
+          .eq("id", rodadaId),
+      );
       if (error) falhar("finalizar rodada", error.message);
     },
 
     async buscarConhecidas(controles) {
       const mapa = new Map<string, CompraConhecida>();
       for (let i = 0; i < controles.length; i += 100) {
-        const { data, error } = await supabase
-          .from("compras")
-          .select("controle_pncp, area_saude, itens_coletados_em, tentativas_itens")
-          .in("controle_pncp", controles.slice(i, i + 100));
+        const lote = controles.slice(i, i + 100);
+        const { data, error } = await tentarNoBanco(() =>
+          supabase
+            .from("compras")
+            .select("controle_pncp, area_saude, itens_coletados_em, tentativas_itens")
+            .in("controle_pncp", lote),
+        );
         if (error) falhar("compras conhecidas", error.message);
         for (const compra of data ?? []) mapa.set(compra.controle_pncp, compra);
       }
@@ -147,11 +203,14 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
     },
 
     async gravarCompra({ compra, classificacao, itens, arquivos, falhaItens }) {
-      const { data, error } = await supabase.rpc("coletor_gravar_compra", {
-        p_compra: { ...compra, ...classificacao, falha_itens: falhaItens ?? false },
-        p_itens: itens ?? null,
-        p_arquivos: arquivos ?? null,
-      });
+      // Gravar de novo a mesma compra dá o mesmo resultado, então repetir é seguro.
+      const { data, error } = await tentarNoBanco(() =>
+        supabase.rpc("coletor_gravar_compra", {
+          p_compra: { ...compra, ...classificacao, falha_itens: falhaItens ?? false },
+          p_itens: itens ?? null,
+          p_arquivos: arquivos ?? null,
+        }),
+      );
       if (error) falhar(`gravar ${compra.controle_pncp}`, error.message);
       return data as ResultadoGravacao;
     },

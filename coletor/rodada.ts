@@ -12,7 +12,7 @@ import {
   type CompraColetada,
 } from "./mapear";
 import { ErroPncp, type ClientePncp } from "./pncp";
-import type { ItemComSegmentos, Repositorio, TotaisDaRodada } from "./repositorio";
+import { resumirErro, type Gravacao, type ItemComSegmentos, type Repositorio, type TotaisDaRodada } from "./repositorio";
 
 export type ConfiguracaoDaRodada = {
   origem: "agendado" | "manual";
@@ -54,6 +54,8 @@ const TERMOS_DE_SONDAGEM = 4;
 const MAXIMO_DE_ERROS_REGISTRADOS = 200;
 /** Depois de tantas falhas seguidas ao baixar itens, a API está fora do ar: para de insistir. */
 const FALHAS_SEGUIDAS_DE_ITENS = 5;
+/** Depois de tantas gravações seguidas com erro, o banco está fora do ar: encerra a rodada. */
+const FALHAS_SEGUIDAS_DE_BANCO = 5;
 
 /** Executa `tarefa` para cada item, com no máximo `limite` ao mesmo tempo. */
 export async function emParalelo<T>(
@@ -213,10 +215,33 @@ export async function executarRodada(
     let falhasSeguidasDeItens = 0;
     const itensForaDoAr = () => falhasSeguidasDeItens >= FALHAS_SEGUIDAS_DE_ITENS;
 
-    const contar = (gravacao: { resultado: string; alteracoes: number }) => {
+    const contar = (gravacao: { resultado: string; alteracoes: number } | null) => {
+      if (!gravacao) return;
       if (gravacao.resultado === "nova") totais.compras_novas++;
       else if (gravacao.resultado === "atualizada") totais.compras_atualizadas++;
       totais.alteracoes += gravacao.alteracoes;
+    };
+
+    // Uma gravação que falha (já depois das retentativas) não derruba a rodada:
+    // a compra fica para a próxima. Só desiste se o banco falhar várias vezes seguidas.
+    let falhasSeguidasDeBanco = 0;
+    const gravar = async (gravacao: Gravacao) => {
+      try {
+        const resultado = await repositorio.gravarCompra(gravacao);
+        falhasSeguidasDeBanco = 0;
+        return resultado;
+      } catch (erro) {
+        falhasSeguidasDeBanco++;
+        totais.erros++;
+        const mensagem = resumirErro(erro instanceof Error ? erro.message : String(erro));
+        if (totais.erros <= MAXIMO_DE_ERROS_REGISTRADOS) {
+          await repositorio.registrarErro(rodadaId, { etapa: "banco", mensagem });
+        }
+        if (falhasSeguidasDeBanco >= FALHAS_SEGUIDAS_DE_BANCO) {
+          throw new Error(`O banco falhou ${falhasSeguidasDeBanco} vezes seguidas. Última falha: ${mensagem}`);
+        }
+        return null;
+      }
     };
 
     const processar = async (compra: CompraColetada, forcarItens = false) => {
@@ -230,13 +255,13 @@ export async function executarRodada(
       if (!precisaDosItens) {
         // Fora da saúde e sem novidade: não há o que gravar.
         if (conhecida.area_saude === false) return;
-        contar(await repositorio.gravarCompra({ compra }));
+        contar(await gravar({ compra }));
         return;
       }
 
       if (baixadas >= cfg.maximoDeCompras || semTempo() || itensForaDoAr()) {
         totais.compras_pendentes++;
-        if (!conhecida) contar(await repositorio.gravarCompra({ compra }));
+        if (!conhecida) contar(await gravar({ compra }));
         return;
       }
       baixadas++;
@@ -255,7 +280,7 @@ export async function executarRodada(
         if (!(erro instanceof ErroPncp)) throw erro;
         falhasSeguidasDeItens++;
         totais.compras_pendentes++;
-        contar(await repositorio.gravarCompra({ compra, falhaItens: true }));
+        contar(await gravar({ compra, falhaItens: true }));
         return;
       }
 
@@ -274,14 +299,14 @@ export async function executarRodada(
         totais.compras_descartadas++;
       }
 
-      const gravacao = await repositorio.gravarCompra({
+      const gravacao = await gravar({
         compra,
         classificacao: { area_saude: areaSaude, segmento_ids: segmentoIds },
         // Fora da saúde não guardamos os itens: a linha serve só para não baixar de novo.
         itens: areaSaude ? itens : [],
         arquivos,
       });
-      if (areaSaude || gravacao.resultado !== "nova") contar(gravacao);
+      if (areaSaude || gravacao?.resultado !== "nova") contar(gravacao);
     };
 
     await emParalelo(fila, cfg.paralelas, (compra) => processar(compra));
@@ -307,7 +332,7 @@ export async function executarRodada(
           const compra = detalhe ? mapearContratacao(detalhe) : null;
           if (!compra) return;
           if (comItens) await processar(compra, true);
-          else contar(await repositorio.gravarCompra({ compra }));
+          else contar(await gravar({ compra }));
         } catch (erro) {
           if (!(erro instanceof ErroPncp)) throw erro;
         }
@@ -343,7 +368,7 @@ export async function executarRodada(
     await descarregarFalhas();
     totais.status = "erro";
     totais.erros++;
-    const mensagem = erro instanceof Error ? erro.message : String(erro);
+    const mensagem = resumirErro(erro instanceof Error ? erro.message : String(erro));
     avisos.unshift(mensagem);
     await repositorio.registrarErro(rodadaId, { etapa: "rodada", mensagem });
   }

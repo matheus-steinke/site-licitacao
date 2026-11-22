@@ -32,11 +32,19 @@ export async function listarCompras(ufs: string[]) {
   const { count: reais, error: erroContagem } = await supabase
     .from("compras")
     .select("id", { count: "exact", head: true })
-    .eq("exemplo", false);
+    .eq("exemplo", false)
+    .eq("area_saude", true);
   if (erroContagem) throw new Error(`Falha ao carregar licitações: ${erroContagem.message}`);
   const soExemplos = (reais ?? 0) === 0;
 
-  let consulta = supabase.from("compras").select(CAMPOS).in("uf", ufs).eq("exemplo", soExemplos);
+  // O filtro por área da saúde é explícito: o RLS já esconde o resto dos clientes, mas o
+  // admin da plataforma enxerga também as pendentes e as descartadas.
+  let consulta = supabase
+    .from("compras")
+    .select(CAMPOS)
+    .in("uf", ufs)
+    .eq("exemplo", soExemplos)
+    .eq("area_saude", true);
   // Com dados reais, só as disputas que ainda não aconteceram.
   if (!soExemplos) consulta = consulta.gte("data_disputa", new Date(agora).toISOString());
   const { data, error } = await consulta.order("data_disputa", { ascending: true }).limit(200);

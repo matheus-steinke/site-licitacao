@@ -349,3 +349,38 @@ describe("rodada do coletor", () => {
     expect(totais).toMatchObject({ status: "erro", mensagem: "Nenhum segmento ativo com palavras-chave." });
   });
 });
+
+describe("falhas do banco durante a rodada", () => {
+  const itens = Object.fromEntries(
+    Array.from({ length: 8 }, (_, i) => [i + 1, [{ numeroItem: 1, descricao: "TROCARTE 5 MM" }]]),
+  );
+  const busca = { trocarte: Array.from({ length: 8 }, (_, i) => daBusca(i + 1)) };
+
+  it("uma gravação que falha não derruba a rodada: a compra fica para a próxima", async () => {
+    const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+    const original = memoria.repositorio.gravarCompra;
+    memoria.repositorio.gravarCompra = async (gravacao) => {
+      if (gravacao.compra.sequencial === 3) throw new Error("Banco (gravar x): resposta HTML: supabase.co | 522: Connection timed out");
+      return original(gravacao);
+    };
+    const { totais } = await rodar({ busca, itens }, memoria, { ...CFG, paralelas: 1 });
+    expect(totais).toMatchObject({ status: "parcial", compras_novas: 7, erros: 1 });
+    expect(memoria.compras.has(chave(3))).toBe(false);
+    expect(memoria.erros).toEqual([
+      { etapa: "banco", mensagem: "Banco (gravar x): resposta HTML: supabase.co | 522: Connection timed out" },
+    ]);
+  });
+
+  it("encerra como erro se o banco falhar várias vezes seguidas", async () => {
+    const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+    let chamadas = 0;
+    memoria.repositorio.gravarCompra = async () => {
+      chamadas++;
+      throw new Error("Banco (gravar x): fetch failed");
+    };
+    const { totais } = await rodar({ busca, itens }, memoria, { ...CFG, paralelas: 1 });
+    expect(chamadas).toBe(5);
+    expect(totais.status).toBe("erro");
+    expect(totais.mensagem).toContain("O banco falhou 5 vezes seguidas");
+  });
+});
