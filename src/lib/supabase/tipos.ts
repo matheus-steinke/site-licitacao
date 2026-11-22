@@ -229,6 +229,148 @@ export type Database = {
           },
         ]
       }
+      convites: {
+        Row: {
+          aceito_em: string | null
+          convidado_por: string | null
+          criado_em: string
+          email: string
+          expira_em: string
+          id: string
+          org_id: string
+        }
+        Insert: {
+          aceito_em?: string | null
+          convidado_por?: string | null
+          criado_em?: string
+          email: string
+          expira_em?: string
+          id?: string
+          org_id: string
+        }
+        Update: {
+          aceito_em?: string | null
+          convidado_por?: string | null
+          criado_em?: string
+          email?: string
+          expira_em?: string
+          id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "convites_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      membros: {
+        Row: {
+          criado_em: string
+          email: string
+          nome: string | null
+          org_id: string
+          papel: Database["public"]["Enums"]["papel_membro"]
+          user_id: string
+        }
+        Insert: {
+          criado_em?: string
+          email: string
+          nome?: string | null
+          org_id: string
+          papel?: Database["public"]["Enums"]["papel_membro"]
+          user_id: string
+        }
+        Update: {
+          criado_em?: string
+          email?: string
+          nome?: string | null
+          org_id?: string
+          papel?: Database["public"]["Enums"]["papel_membro"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membros_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizacao_segmentos: {
+        Row: {
+          criado_em: string
+          org_id: string
+          segmento_id: string
+        }
+        Insert: {
+          criado_em?: string
+          org_id: string
+          segmento_id: string
+        }
+        Update: {
+          criado_em?: string
+          org_id?: string
+          segmento_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organizacao_segmentos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organizacao_segmentos_segmento_id_fkey"
+            columns: ["segmento_id"]
+            isOneToOne: false
+            referencedRelation: "segmentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizacoes: {
+        Row: {
+          atualizado_em: string
+          cnpj: string
+          criado_em: string
+          id: string
+          onboarding_concluido_em: string | null
+          plano: string
+          porte: Database["public"]["Enums"]["porte_empresa"]
+          razao_social: string
+          ufs: string[]
+        }
+        Insert: {
+          atualizado_em?: string
+          cnpj: string
+          criado_em?: string
+          id?: string
+          onboarding_concluido_em?: string | null
+          plano?: string
+          porte: Database["public"]["Enums"]["porte_empresa"]
+          razao_social: string
+          ufs?: string[]
+        }
+        Update: {
+          atualizado_em?: string
+          cnpj?: string
+          criado_em?: string
+          id?: string
+          onboarding_concluido_em?: string | null
+          plano?: string
+          porte?: Database["public"]["Enums"]["porte_empresa"]
+          razao_social?: string
+          ufs?: string[]
+        }
+        Relationships: []
+      }
       orgaos: {
         Row: {
           atualizado_em: string
@@ -300,10 +442,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      aceitar_convite: { Args: { p_convite: string }; Returns: string }
+      criar_organizacao: {
+        Args: {
+          p_cnpj: string
+          p_porte: Database["public"]["Enums"]["porte_empresa"]
+          p_razao_social: string
+        }
+        Returns: string
+      }
+      definir_segmentos_organizacao: {
+        Args: { p_org: string; p_segmentos: string[] }
+        Returns: undefined
+      }
+      meus_convites: {
+        Args: never
+        Returns: {
+          convite_id: string
+          criado_em: string
+          organizacao: string
+        }[]
+      }
     }
     Enums: {
-      [_ in never]: never
+      papel_membro: "dono" | "membro"
+      porte_empresa: "me_epp" | "demais"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -392,4 +555,21 @@ export type TablesUpdate<
       }
       ? U
       : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never

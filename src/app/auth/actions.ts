@@ -5,14 +5,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { caminhoSeguro } from "@/lib/caminho";
+import type { EstadoFormulario } from "@/lib/estado-formulario";
 import { criarClienteServidor } from "@/lib/supabase/server";
 
-export type EstadoFormulario = {
-  erro?: string;
-  mensagem?: string;
-  /** Valores a devolver ao formulário quando há erro. */
-  valores?: Record<string, string>;
-};
 
 const email = z.string().trim().toLowerCase().pipe(z.email("Informe um e-mail válido."));
 const senhaNova = z

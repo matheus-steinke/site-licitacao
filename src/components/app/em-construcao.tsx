@@ -1,11 +1,10 @@
 import { Hammer } from "lucide-react";
 
-import { exigirUsuario } from "@/lib/auth";
 
 import { CabecalhoPagina } from "./cabecalho-pagina";
 
 /** Tela reservada para uma etapa futura do plano (docs/ARQUITETURA.md). */
-export async function EmConstrucao({
+export function EmConstrucao({
   titulo,
   etapa,
   oQueVem,
@@ -14,8 +13,6 @@ export async function EmConstrucao({
   etapa: number;
   oQueVem: string[];
 }) {
-  await exigirUsuario();
-
   return (
     <>
       <CabecalhoPagina titulo={titulo} />

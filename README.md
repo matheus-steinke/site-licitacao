@@ -11,7 +11,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | Etapa | Conteúdo | Situação |
 |---|---|---|
 | 1 | Base: projeto, banco com RLS, login, menu, seed, páginas LGPD | Pronta |
-| 2 | Onboarding, Configurações, usuários, admin de segmentos | A fazer |
+| 2 | Onboarding, Configurações, usuários, admin de segmentos | Pronta |
 | 3 | Catálogo e importação de Excel/CSV | A fazer |
 | 4 | Coletor do PNCP | A fazer |
 | 5 | Triagem e Oportunidades | A fazer |
@@ -114,14 +114,50 @@ O item "Admin" aparece no menu desse usuário no próximo carregamento.
 
 ### Regras de acesso (RLS)
 
+Dados globais:
+
 | Tabela | Visitante | Usuário logado | Admin da plataforma | Coletor (service role) |
 |---|---|---|---|---|
 | `segmentos` | nada | lê | lê e edita | tudo |
 | `orgaos`, `compras`, `compra_itens`, `compra_arquivos` | nada | lê | lê | tudo |
 | `admins_plataforma` | nada | vê só a própria linha | vê só a própria linha | tudo |
 
-As tabelas por organização (catálogo, oportunidades etc.) entram a partir da etapa 2,
-sempre com `org_id` e RLS.
+Dados por organização (um usuário só enxerga a própria organização):
+
+| Tabela | Membro | Responsável (dono) | Admin da plataforma |
+|---|---|---|---|
+| `organizacoes` | lê | lê e altera (menos o `plano`) | lê todas |
+| `membros` | lê | lê e remove outros membros | lê todos |
+| `convites` | nada | lê, cria e cancela | nada |
+| `organizacao_segmentos` | lê | lê e altera | lê todos |
+
+Criação de organização e aceite de convite passam por funções do banco
+(`criar_organizacao`, `aceitar_convite`), que conferem o usuário logado. Ninguém insere
+direto nessas tabelas.
+
+## Organizações e usuários
+
+- No primeiro acesso o usuário passa pelo onboarding: empresa, estados, segmentos e tabela de
+  preços (a importação da tabela chega na etapa 3). Quem cria a organização é o responsável.
+- Neste MVP cada usuário pertence a uma única organização, e cada CNPJ a uma única
+  organização. O CNPJ é validado pelos dígitos verificadores, inclusive no formato
+  alfanumérico.
+- **Convites:** em Configurações > Usuários, o responsável informa o e-mail da pessoa e o app
+  gera um link de cadastro com esse e-mail. O responsável envia o link (o envio automático
+  por e-mail entra na etapa 9, junto com o Resend). Quem entrar com aquele e-mail, já
+  confirmado, vê o convite e aceita. Convites valem 14 dias.
+- Só o responsável altera dados da empresa, estados, segmentos e usuários. Os membros
+  consultam.
+
+## Painel ADMIN
+
+Disponível para quem está em `admins_plataforma`, pelo item "Admin" do menu:
+
+- **Segmentos:** nome, ordem, ativo, palavras-chave, sinônimos e exclusões (um termo por
+  linha; vírgula não separa termos, por causa de medidas como "0,035"). Segmento escolhido
+  por alguma organização não pode ser excluído, só desativado.
+- **Organizações:** empresas cadastradas, com porte, plano, estados, segmentos e usuários.
+- **Rodadas do coletor:** chega na etapa 4.
 
 ## Configurar o login no Supabase
 
@@ -181,7 +217,8 @@ supabase/seed.sql      licitações de exemplo
 supabase/tests/        testes de RLS
 src/app/(publico)/     entrar, cadastrar, recuperar e redefinir senha
 src/app/(legal)/       termos de uso e política de privacidade
-src/app/(app)/         área logada (menu + telas)
+src/app/onboarding/    primeiros passos (empresa, estados, segmentos, tabela)
+src/app/(app)/         área logada (menu + telas), incluindo admin/
 src/app/auth/          ações de login e rotas de retorno do Supabase
 src/components/        componentes (ui/ = shadcn)
 src/lib/               Supabase, autenticação, formatação, acesso a dados

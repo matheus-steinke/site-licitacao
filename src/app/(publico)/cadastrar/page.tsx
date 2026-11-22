@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import {
   Card,
@@ -9,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { FormularioCadastrar } from "./formulario";
 
@@ -24,7 +26,9 @@ export default function PaginaCadastrar() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <FormularioCadastrar />
+        <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+          <FormularioCadastrar />
+        </Suspense>
       </CardContent>
       <CardFooter className="justify-center text-sm text-muted-foreground">
         Já tem conta?&nbsp;

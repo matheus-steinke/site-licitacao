@@ -1,6 +1,6 @@
 import "server-only";
 
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 
 import { criarClienteServidor } from "@/lib/supabase/server";
@@ -47,3 +47,13 @@ export const ehAdminPlataforma = cache(async (): Promise<boolean> => {
     .maybeSingle();
   return Boolean(data);
 });
+
+/**
+ * Para o painel ADMIN: exige login e admin da plataforma.
+ * Quem não é admin recebe "página não encontrada", sem saber que o painel existe.
+ */
+export async function exigirAdmin(): Promise<Usuario> {
+  const usuario = await exigirUsuario();
+  if (!(await ehAdminPlataforma())) notFound();
+  return usuario;
+}

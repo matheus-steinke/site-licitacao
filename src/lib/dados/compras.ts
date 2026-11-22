@@ -11,8 +11,8 @@ export const SITUACOES: Record<number, string> = {
 
 export type CompraResumo = Awaited<ReturnType<typeof listarCompras>>[number];
 
-/** Licitações globais, da disputa mais próxima para a mais distante. */
-export async function listarCompras() {
+/** Licitações das UFs informadas, da disputa mais próxima para a mais distante. */
+export async function listarCompras(ufs: string[]) {
   const supabase = await criarClienteServidor();
   const { data, error } = await supabase
     .from("compras")
@@ -22,6 +22,7 @@ export async function listarCompras() {
        orgao:orgaos (razao_social),
        itens:compra_itens (count)`,
     )
+    .in("uf", ufs)
     .order("data_disputa", { ascending: true })
     .limit(200);
 

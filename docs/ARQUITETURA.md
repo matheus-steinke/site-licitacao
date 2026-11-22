@@ -100,6 +100,22 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 7. **Agendador:** GitHub Actions (repositório público, sem custo de minutos). Atenção: em repositório público, o GitHub desativa workflows agendados após 60 dias sem atividade no repositório.
 8. **Infra:** projetos Supabase e Vercel criados pelo Claude nas contas do dono do projeto.
 
+## Decisões tomadas na etapa 2
+
+9. **Um usuário, uma organização:** o banco tem a restrição `membros_user_id_unico`. Para
+   permitir mais de uma organização por usuário no futuro, basta removê-la e adicionar um
+   seletor de organização.
+10. **Papéis:** `dono` (responsável, quem criou a organização) e `membro`. Só o dono altera
+    dados da empresa, estados, segmentos e usuários.
+11. **Convites por link:** o convite fica vinculado ao e-mail; quem entra com esse e-mail,
+    já confirmado, pode aceitar. O envio automático por e-mail entra na etapa 9 (Resend).
+12. **CNPJ único:** cada CNPJ pertence a uma organização. Quem tentar cadastrar um CNPJ já
+    usado é orientado a pedir convite ao responsável.
+13. **Nome e e-mail do membro** são copiados para `membros` na entrada, porque `auth.users`
+    não é visível ao cliente.
+14. **Admin sem empresa** acessa o painel Admin normalmente, mas precisa passar pelo
+    onboarding para usar as telas de cliente.
+
 ## Pontos a confirmar durante a construção
 
 - Nomes reais dos campos da API do PNCP (etapa 4).

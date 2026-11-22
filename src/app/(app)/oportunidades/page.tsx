@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { CalendarClock, FlaskConical, MapPin } from "lucide-react";
+import Link from "next/link";
 
 import { CabecalhoPagina } from "@/components/app/cabecalho-pagina";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { exigirUsuario } from "@/lib/auth";
 import { listarCompras, SITUACOES, type CompraResumo } from "@/lib/dados/compras";
+import { exigirOrganizacao } from "@/lib/organizacao";
 import { formatarDataHora, formatarDiaSemana, formatarMoeda } from "@/lib/formato";
 
 export const metadata: Metadata = { title: "Oportunidades" };
@@ -56,8 +57,8 @@ function CartaoCompra({ compra }: { compra: CompraResumo }) {
 }
 
 export default async function PaginaOportunidades() {
-  await exigirUsuario();
-  const compras = await listarCompras();
+  const { org } = await exigirOrganizacao();
+  const compras = await listarCompras(org.ufs);
   const soExemplos = compras.length > 0 && compras.every((c) => c.exemplo);
 
   return (
@@ -66,6 +67,14 @@ export default async function PaginaOportunidades() {
         titulo="Oportunidades"
         descricao="Licitações da área da saúde, da disputa mais próxima para a mais distante."
       />
+
+      <p className="mb-4 text-sm text-muted-foreground">
+        Estados da sua empresa: <span className="font-medium text-foreground">{org.ufs.join(", ")}</span>
+        .{" "}
+        <Link href="/configuracoes" className="underline hover:text-foreground">
+          Alterar
+        </Link>
+      </p>
 
       {soExemplos ? (
         <Alert className="mb-4">
@@ -80,7 +89,7 @@ export default async function PaginaOportunidades() {
 
       {compras.length === 0 ? (
         <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-          Nenhuma licitação por aqui ainda.
+          Nenhuma licitação nos estados da sua empresa por enquanto.
         </p>
       ) : (
         <ul className="flex flex-col gap-3">

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 
 import { EmConstrucao } from "@/components/app/em-construcao";
+import { exigirOrganizacao } from "@/lib/organizacao";
 
 export const metadata: Metadata = { title: "Integrações" };
 
-export default function Pagina() {
+export default async function Pagina() {
+  await exigirOrganizacao();
+
   return (
     <EmConstrucao
       titulo="Integrações"

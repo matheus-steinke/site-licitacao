@@ -2,8 +2,9 @@
 
 import { useActionState } from "react";
 
-import { redefinirSenha, type EstadoFormulario } from "@/app/auth/actions";
+import { redefinirSenha } from "@/app/auth/actions";
 import { BotaoEnviar } from "@/components/formulario/botao-enviar";
+import type { EstadoFormulario } from "@/lib/estado-formulario";
 import { MensagemErro } from "@/components/formulario/mensagens";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

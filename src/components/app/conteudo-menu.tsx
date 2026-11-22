@@ -6,6 +6,7 @@ import { BotaoEnviar } from "@/components/formulario/botao-enviar";
 import { RodapeLegal } from "@/components/rodape-legal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ehAdminPlataforma, obterUsuario } from "@/lib/auth";
+import { obterOrganizacao } from "@/lib/organizacao";
 
 import { Navegacao } from "./navegacao";
 
@@ -16,12 +17,15 @@ async function NavegacaoDoUsuario() {
 async function BlocoUsuario() {
   const usuario = await obterUsuario();
   if (!usuario) return null;
+  const atual = await obterOrganizacao();
 
   return (
     <div className="flex items-center gap-2">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{usuario.nome}</p>
-        <p className="truncate text-xs text-muted-foreground">{usuario.email}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {atual?.org.razao_social ?? usuario.email}
+        </p>
       </div>
       <form action={sair}>
         <BotaoEnviar variant="ghost" size="icon-lg" aria-label="Sair" title="Sair">

@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useActionState } from "react";
 
-import { entrar, type EstadoFormulario } from "@/app/auth/actions";
+import { entrar } from "@/app/auth/actions";
 import { BotaoEnviar } from "@/components/formulario/botao-enviar";
 import { BotaoGoogle } from "@/components/formulario/botao-google";
 import { DivisorOu } from "@/components/formulario/divisor";
+import type { EstadoFormulario } from "@/lib/estado-formulario";
 import { MensagemErro, MensagemOk } from "@/components/formulario/mensagens";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

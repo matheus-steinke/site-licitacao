@@ -1,18 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useActionState } from "react";
 
-import { cadastrar, type EstadoFormulario } from "@/app/auth/actions";
+import { cadastrar } from "@/app/auth/actions";
 import { BotaoEnviar } from "@/components/formulario/botao-enviar";
 import { BotaoGoogle } from "@/components/formulario/botao-google";
 import { DivisorOu } from "@/components/formulario/divisor";
+import type { EstadoFormulario } from "@/lib/estado-formulario";
 import { MensagemErro, MensagemOk } from "@/components/formulario/mensagens";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function FormularioCadastrar() {
   const [estado, acao] = useActionState<EstadoFormulario, FormData>(cadastrar, {});
+  // O link de convite traz o e-mail convidado: /cadastrar?email=...
+  const emailConvidado = useSearchParams().get("email") ?? "";
 
   if (estado.mensagem) {
     return (
@@ -54,9 +58,14 @@ export function FormularioCadastrar() {
             autoComplete="email"
             inputMode="email"
             required
-            defaultValue={estado.valores?.email}
+            defaultValue={estado.valores?.email ?? emailConvidado}
             className="h-10"
           />
+          {emailConvidado ? (
+            <p className="text-xs text-muted-foreground">
+              Use este mesmo e-mail para o convite aparecer depois do cadastro.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="senha">Senha</Label>
