@@ -10,6 +10,8 @@ Sempre siga a especificação em [`docs/ESPECIFICACAO.md`](docs/ESPECIFICACAO.md
 - Se algo na especificação estiver ambíguo ou for tecnicamente ruim, pergunte ou sugira alternativa. Não chute.
 - Se uma decisão aprovada pelo usuário mudar a especificação, atualize `docs/ESPECIFICACAO.md` no mesmo commit.
 
+A arquitetura, o plano em etapas e as decisões aprovadas depois da especificação estão em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md). Consulte antes de começar uma etapa.
+
 ## Como trabalhar (resumo da especificação)
 
 1. Antes de escrever código: apresentar arquitetura, modelo de dados, lista de telas e plano em etapas, e esperar aprovação.
@@ -22,3 +24,10 @@ Sempre siga a especificação em [`docs/ESPECIFICACAO.md`](docs/ESPECIFICACAO.md
 - Interface em português do Brasil, fuso `America/Sao_Paulo`, moeda R$ no formato `1.234,56`.
 - Triagem 100% sem IA neste MVP.
 - Row Level Security em todas as tabelas de cliente; dados do PNCP são globais.
+
+## Convenções técnicas
+
+- Next.js 16 com Cache Components: leia [`AGENTS.md`](AGENTS.md) e a documentação em `node_modules/next/dist/docs/` antes de mexer em rotas, cache ou proxy. Toda leitura de sessão ou de dados do cliente fica atrás de um `<Suspense>` (ou do `loading.tsx` do grupo `(app)`).
+- Nomes de tabelas, colunas, arquivos e funções do domínio em português.
+- Toda migration nova: RLS ligado, permissões explícitas (`grant`/`revoke`), um teste em `supabase/tests/` e tipos regenerados em `src/lib/supabase/tipos.ts`.
+- Antes de concluir uma etapa: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db` e `pnpm build`.

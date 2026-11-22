@@ -41,8 +41,8 @@ async function origem(): Promise<string> {
   return `${protocolo}://${host}`;
 }
 
-function traduzirErro(codigo: string | undefined): string {
-  switch (codigo) {
+function traduzirErro(erro: { code?: string; message?: string }): string {
+  switch (erro.code) {
     case "invalid_credentials":
       return "E-mail ou senha incorretos.";
     case "email_not_confirmed":
@@ -65,6 +65,8 @@ function traduzirErro(codigo: string | undefined): string {
     case "validation_failed":
       return "O login com Google ainda não foi configurado. Use e-mail e senha.";
     default:
+      // Erro não previsto: fica registrado no log do servidor para diagnóstico.
+      console.error("[auth] erro não mapeado:", erro.code, erro.message);
       return "Não foi possível concluir. Tente de novo em instantes.";
   }
 }
@@ -84,7 +86,7 @@ export async function entrar(
     email: dados.data.email,
     password: dados.data.senha,
   });
-  if (error) return { erro: traduzirErro(error.code), valores };
+  if (error) return { erro: traduzirErro(error), valores };
 
   redirect(caminhoSeguro(formData.get("proximo")));
 }
@@ -119,7 +121,7 @@ export async function cadastrar(
       data: { nome: dados.data.nome, aceite_termos_em: new Date().toISOString() },
     },
   });
-  if (error) return { erro: traduzirErro(error.code), valores };
+  if (error) return { erro: traduzirErro(error), valores };
 
   // Com confirmação de e-mail desligada no Supabase, a sessão já vem pronta.
   if (data.session) redirect("/oportunidades");
@@ -154,7 +156,7 @@ export async function recuperarSenha(
   const { error } = await supabase.auth.resetPasswordForEmail(dados.data, {
     redirectTo: `${await origem()}/auth/callback?next=/redefinir-senha`,
   });
-  if (error?.code?.startsWith("over_")) return { erro: traduzirErro(error.code), valores };
+  if (error?.code?.startsWith("over_")) return { erro: traduzirErro(error), valores };
 
   // Mesma resposta exista ou não a conta, para não revelar quem é cliente.
   return {
@@ -178,7 +180,7 @@ export async function redefinirSenha(
     return { erro: "O link expirou. Peça um novo em “Esqueci minha senha”." };
   }
   const { error } = await supabase.auth.updateUser({ password: dados.data });
-  if (error) return { erro: traduzirErro(error.code) };
+  if (error) return { erro: traduzirErro(error) };
 
   redirect("/oportunidades");
 }
