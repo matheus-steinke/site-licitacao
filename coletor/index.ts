@@ -26,6 +26,26 @@ function numero(valor: string | undefined, padrao: number): number {
   return valor !== undefined && Number.isFinite(n) && n > 0 ? n : padrao;
 }
 
+/** Detecta os enganos mais comuns ao colar a chave, sem nunca imprimir o valor. */
+export function problemaNaChave(chave: string): string | null {
+  if (/[•*…]|\.{3}/.test(chave)) return "o valor está mascarado (tem •••• ou ...); use o botão de revelar/copiar.";
+  if (/\s/.test(chave)) return "o valor tem espaço ou quebra de linha no meio.";
+  if (chave.startsWith("sb_publishable_")) return "esta é a chave pública (sb_publishable_); use a secreta (sb_secret_).";
+  if (chave.startsWith("sb_secret_")) return chave.length < 30 ? "o valor parece cortado." : null;
+  if (chave.startsWith("eyJ")) {
+    const partes = chave.split(".");
+    if (partes.length !== 3) return "o valor parece cortado (um JWT tem três partes separadas por ponto).";
+    try {
+      const papel = JSON.parse(Buffer.from(partes[1], "base64url").toString("utf8")).role;
+      if (papel === "anon") return "esta é a chave pública (anon); use a service_role.";
+    } catch {
+      return "o valor parece cortado ou alterado.";
+    }
+    return null;
+  }
+  return "o valor não começa com sb_secret_ nem com eyJ.";
+}
+
 async function principal() {
   const falhas: { url: string; status?: number; mensagem: string }[] = [];
   const pncp = criarClientePncp({
@@ -64,10 +84,18 @@ async function principal() {
     return;
   }
 
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const chave = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Espaço ou quebra de linha sobrando (comum ao colar a chave) invalidam a chave.
+  const url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
+  const chave = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
   if (!url || !chave) {
     console.error("Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY (veja o README, seção Coletor).");
+    process.exitCode = 1;
+    return;
+  }
+  const problema = problemaNaChave(chave);
+  if (problema) {
+    console.error(`SUPABASE_SERVICE_ROLE_KEY não parece uma chave de serviço do Supabase: ${problema}`);
+    console.error("Copie de novo em Project Settings > API Keys (veja o README, seção Coletor).");
     process.exitCode = 1;
     return;
   }
@@ -76,7 +104,22 @@ async function principal() {
   process.exitCode = totais.status === "erro" ? 1 : 0;
 }
 
-principal().catch((erro) => {
-  console.error("Falha inesperada no coletor:", erro);
+const chamadoDireto = process.argv[1]?.replace(/\\/g, "/").endsWith("coletor/index.ts");
+if (chamadoDireto) principal().catch((erro) => {
+  const mensagem = erro instanceof Error ? erro.message : String(erro);
+  if (/invalid api key|unregistered api key/i.test(mensagem)) {
+    console.error(
+      "O Supabase recusou a chave (Invalid API key). O valor de SUPABASE_SERVICE_ROLE_KEY não é uma chave válida do projeto em SUPABASE_URL. " +
+        "Confira se copiou a chave inteira (revelada, não a versão mascarada com ••••), do projeto certo, e salve o segredo de novo.",
+    );
+  } else if (/permission denied|row-level security|not authorized/i.test(mensagem)) {
+    console.error(
+      "O Supabase aceitou a chave, mas ela não tem permissão de escrita. SUPABASE_SERVICE_ROLE_KEY precisa ser a chave de serviço " +
+        "(service_role ou sb_secret_...), não a chave pública (anon ou sb_publishable_...).",
+    );
+    console.error(mensagem);
+  } else {
+    console.error("Falha inesperada no coletor:", erro);
+  }
   process.exitCode = 1;
 });
