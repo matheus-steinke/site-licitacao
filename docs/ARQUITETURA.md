@@ -179,6 +179,16 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     por isso instrumental e equipamento de dentista são descartados, e o segmento de
     equipamentos ganhou a exclusão "odontológico". Se for de interesse, basta criar o
     segmento em Admin > Segmentos.
+38. **Lista de Oportunidades mostra as 200 disputas mais próximas** e avisa quando há
+    mais. Filtros e paginação entram com a triagem (etapa 5). Valor estimado zero no PNCP
+    aparece como "não informado" (o órgão não informou ou o valor é sigiloso).
+39. **Aviso de navegação instantânea no modo de desenvolvimento.** O `next dev` acusa
+    "uncached data outside of Suspense" em todas as páginas logadas: elas leem a sessão e
+    depois o banco, cobertas só pelo `loading.tsx` do grupo `(app)`. É um aviso (nível
+    `warning`, só em desenvolvimento): o build passa e a navegação mostra o esqueleto
+    enquanto os dados chegam. O ajuste fino (um `<Suspense>` por bloco da página, como
+    descreve `node_modules/next/dist/docs/01-app/02-guides/instant-navigation.md`) fica
+    para a etapa 5, quando a tela de Oportunidades for refeita.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

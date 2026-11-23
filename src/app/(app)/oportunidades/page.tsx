@@ -50,7 +50,10 @@ function CartaoCompra({ compra }: { compra: CompraResumo }) {
         </div>
         <div className="flex gap-1.5">
           <dt className="text-muted-foreground">Valor estimado do edital</dt>
-          <dd className="font-medium tabular-nums">{formatarMoeda(compra.valor_total_estimado)}</dd>
+          <dd className="font-medium tabular-nums">
+            {/* O PNCP manda zero quando o órgão não informa o valor ou ele é sigiloso. */}
+            {compra.valor_total_estimado ? formatarMoeda(compra.valor_total_estimado) : "não informado"}
+          </dd>
         </div>
         {compra.linkPncp ? (
           <a
@@ -70,7 +73,7 @@ function CartaoCompra({ compra }: { compra: CompraResumo }) {
 
 export default async function PaginaOportunidades() {
   const { org } = await exigirOrganizacao();
-  const [{ compras, soExemplos }, totalProdutos] = await Promise.all([
+  const [{ compras, soExemplos, cortada }, totalProdutos] = await Promise.all([
     listarCompras(org.ufs),
     contarProdutos(org.id),
   ]);
@@ -127,6 +130,13 @@ export default async function PaginaOportunidades() {
           ))}
         </ul>
       )}
+
+      {cortada ? (
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Mostrando as {compras.length} disputas mais próximas. Os filtros e a triagem pelo seu
+          catálogo chegam na etapa 5.
+        </p>
+      ) : null}
     </>
   );
 }
