@@ -130,3 +130,19 @@ select teste.espera(
 select teste.espera(
   (select sinonimos @> array['duplo jota', 'pigtail', 'holmium'] from public.segmentos where slug = 'urologia'),
   'sinônimos específicos continuam');
+
+-- Vocabulário acrescentado depois da primeira rodada real.
+select teste.espera(
+  (select sinonimos @> array['maca clínica', 'monitor multiparâmetro', 'equipamento de ultrassom'] from public.segmentos where slug = 'equipamentos')
+  and (select sinonimos @> array['marca-passo'] from public.segmentos where slug = 'cardiologia-hemodinamica')
+  and (select sinonimos @> array['tira reagente', 'reagente analítico'] from public.segmentos where slug = 'laboratorio'),
+  'sinônimos medidos na rodada real entraram');
+select teste.espera(
+  (select exclusoes @> array['odontológico', 'locação'] from public.segmentos where slug = 'equipamentos'),
+  'equipamentos exclui odontológico sem perder as exclusões antigas');
+select teste.espera(
+  not exists (
+    select 1 from public.segmentos s
+    where (select count(*) from unnest(s.sinonimos)) <> (select count(distinct t) from unnest(s.sinonimos) as t)
+  ),
+  'nenhum sinônimo ficou repetido');

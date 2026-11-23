@@ -166,6 +166,19 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 33. **Busca com 2 chamadas simultâneas e segunda passada** nos termos que falham.
 34. **Falha no banco não encerra a rodada:** gravações são repetidas e, se uma falhar de
     vez, a compra fica para a próxima rodada.
+35. **Quedas de conexão contam à parte:** até 10 tentativas com espera curta, sem gastar as
+    4 tentativas das falhas lentas (ver "O que a API do PNCP mostrou").
+36. **Vocabulário dos segmentos ajustado com dados reais.** Dos 78 editais descartados na
+    rodada de 22/11/2026, 22 eram da saúde: os itens usavam nomes que nenhum segmento
+    conhecia ("maca clínica", "adesivo cirúrgico", "monitor multiparâmetro", "marca-passo"
+    com hífen). Entraram 29 sinônimos (migration `segmentos_vocabulario`), testados contra
+    esses itens antes de gravar. Outros 3 só esperavam a reclassificação da decisão 32. Os
+    53 restantes continuam fora, como devem: cozinha, obras, limpeza, veterinário,
+    manutenção, medicina do trabalho, odontologia.
+37. **Odontologia fica fora.** A taxonomia da especificação não tem segmento odontológico;
+    por isso instrumental e equipamento de dentista são descartados, e o segmento de
+    equipamentos ganhou a exclusão "odontológico". Se for de interesse, basta criar o
+    segmento em Admin > Segmentos.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

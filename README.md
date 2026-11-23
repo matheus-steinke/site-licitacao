@@ -272,6 +272,11 @@ seguinte percebe a diferença, baixa de novo os itens dos editais abertos e recl
 tudo, inclusive o que tinha sido descartado. Com muitos editais isso leva mais de uma
 rodada (limite de 1.500 por rodada); até lá vale a classificação anterior.
 
+Para saber se falta vocabulário, veja em Admin > Rodadas do coletor quantos editais foram
+descartados. Na primeira rodada real, 22 de 78 descartados eram da saúde e usavam nomes que
+nenhum segmento conhecia; eles entraram como sinônimos na migration
+`segmentos_vocabulario`. Odontologia não faz parte dos segmentos e é descartada.
+
 ### Casamento de texto (sem IA)
 
 O mesmo código ([`src/lib/texto`](src/lib/texto)) serve ao coletor e servirá à triagem:
