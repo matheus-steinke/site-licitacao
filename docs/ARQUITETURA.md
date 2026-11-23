@@ -169,11 +169,18 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 - **Instabilidade:** no dia do desenvolvimento a API principal (`/api/pncp/v1`, itens e
   arquivos) ficou horas devolvendo 503, e houve respostas vazias e timeouts esporádicos.
 
-## Pontos ainda a confirmar
-
-- **Campos dos itens** (`/api/pncp/v1/.../itens`): a API estava fora do ar durante o
-  desenvolvimento. O coletor usa os nomes da documentação do PNCP (`numeroItem`,
-  `descricao`, `quantidade`, `unidadeMedida`, `valorUnitarioEstimado`, `valorTotal`,
-  `tipoBeneficio`) e precisa ser conferido na primeira rodada real.
-- **Lote/grupo:** a documentação não traz um campo de lote por item. O coletor aceita vários
-  nomes possíveis; se nenhum vier, o alerta de "lote incompleto" dependerá do texto do edital.
+- **Itens** (`/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens`), conferidos em
+  23/11/2026 na primeira rodada real (59 mil itens): `numeroItem`, `descricao`, `quantidade`,
+  `unidadeMedida`, `valorUnitarioEstimado`, `valorTotal`, `tipoBeneficio` (1 = exclusivo
+  ME/EPP, 3 = cota reservada, 4 = sem benefício, 5 = não se aplica) e
+  `situacaoCompraItemNome`. O `numeroItem` nem sempre é 1, 2, 3: alguns sistemas mandam um
+  identificador grande.
+- **Lote/grupo não existe na API de itens.** Nenhum dos 59 mil itens trouxe esse campo. Para
+  o alerta de "lote incompleto" (etapa 5) restam a descrição do item, que em poucos casos
+  cita "LOTE 1", e o texto do edital (etapa 10).
+- **Arquivos** (`.../arquivos`): `sequencialDocumento`, `titulo`, `tipoDocumentoNome`, `url`.
+- **A busca derruba conexões** quando recebe muitas chamadas seguidas: numa rodada com 4
+  chamadas simultâneas, 73 de 294 termos falharam. Por isso a busca usa 2 simultâneas e
+  repete no fim os termos que falharam.
+- **Escala:** os 221 termos que responderam acharam 1.533 editais abertos com disputa em
+  até 30 dias.

@@ -167,7 +167,10 @@ export function mapearContratacao(c: ContratacaoPncp): CompraColetada | null {
 /** tipoBeneficio do PNCP: 1 = participação exclusiva para ME/EPP. */
 const BENEFICIO_EXCLUSIVO_ME_EPP = 1;
 
-/** Nomes que o campo de lote/grupo pode ter na resposta (a confirmar; ver ARQUITETURA.md). */
+/**
+ * A API de itens do PNCP não informa lote/grupo (conferido em 59 mil itens reais, em
+ * 23/11/2026). Estes nomes ficam só para o caso de o campo passar a existir.
+ */
 const CAMPOS_DE_GRUPO = ["numeroGrupo", "grupo", "numeroLote", "lote", "grupoItem", "loteItem"];
 
 function grupoDoItem(item: ItemPncp): string | null {

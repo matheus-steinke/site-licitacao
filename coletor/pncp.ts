@@ -267,7 +267,7 @@ export type RespostaConsulta = {
   empty: boolean;
 };
 
-/** Item da compra. Os nomes de lote/grupo variam; ver mapear.ts. */
+/** Item da compra (campos conferidos na API real; não há campo de lote/grupo). */
 export type ItemPncp = {
   numeroItem: number;
   descricao?: string | null;

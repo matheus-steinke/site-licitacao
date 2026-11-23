@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import arquivos from "./fixtures/arquivos.json";
 import busca from "./fixtures/busca.json";
 import detalhe from "./fixtures/detalhe.json";
+import itens from "./fixtures/itens.json";
 import proposta from "./fixtures/proposta.json";
 import {
   controlePncp,
@@ -11,7 +13,7 @@ import {
   mapearContratacao,
   mapearItem,
 } from "./mapear";
-import type { ContratacaoPncp, ItemBusca } from "./pncp";
+import type { ArquivoPncp, ContratacaoPncp, ItemBusca, ItemPncp } from "./pncp";
 
 describe("datas do PNCP", () => {
   it("interpreta datas sem fuso como horário de Brasília", () => {
@@ -85,6 +87,35 @@ describe("respostas reais do PNCP", () => {
   it("recusa registros sem identificação", () => {
     expect(mapearBusca({ ...busca.items[0], numero_sequencial: "" } as unknown as ItemBusca)).toBeNull();
     expect(mapearContratacao({ ...detalhe, orgaoEntidade: {} } as unknown as ContratacaoPncp)).toBeNull();
+  });
+});
+
+describe("itens e arquivos reais do PNCP", () => {
+  it("converte um item real (o número do item pode ser um identificador grande)", () => {
+    expect(mapearItem(itens[0] as unknown as ItemPncp)).toEqual({
+      numero_item: 8230631,
+      descricao: "DRENO DE TORAX Nº 10 ESTERIL DESCARTAVEL C/ FRASCO 2000 ML",
+      quantidade: 10,
+      unidade: "UND",
+      valor_unitario_estimado: 49.27,
+      valor_total: 492.7,
+      // A API de itens não informa lote/grupo.
+      grupo: null,
+      tipo_beneficio_id: 1,
+      exclusivo_me_epp: true,
+      situacao_item: "Em andamento",
+    });
+    for (const item of itens) expect(mapearItem(item as unknown as ItemPncp)).not.toBeNull();
+  });
+
+  it("converte um arquivo real", () => {
+    expect(mapearArquivo(arquivos[0] as unknown as ArquivoPncp)).toEqual({
+      sequencial_documento: 1,
+      titulo: "208313_editais_1795022463.zip",
+      tipo_documento: "Edital",
+      url: "https://pncp.gov.br/pncp-api/v1/orgaos/04092680000171/compras/2026/156/arquivos/1",
+      publicado_em: "2026-11-18T17:21:56.000Z",
+    });
   });
 });
 
