@@ -39,6 +39,11 @@ export type ConfiguracaoDaRodada = {
   maximoDeVerificacoes: number;
   /** Tempo máximo da rodada; ao estourar, ela termina como "parcial". */
   tempoMaximoMs: number;
+  /**
+   * Tempo máximo da fase de busca (padrão: 60% do tempo da rodada). Sem esse teto, numa
+   * noite ruim do PNCP a busca gastaria a rodada inteira e nenhum item seria baixado.
+   */
+  tempoMaximoDaBuscaMs?: number;
   /** Para testes e simulações: usa só os primeiros N termos. */
   limiteDeTermos?: number;
   agora?: () => Date;
@@ -61,6 +66,8 @@ const PAGINAS_POR_TERMO = 10;
 const TAMANHO_DA_PAGINA = 100;
 /** Se os primeiros termos falharem todos, a busca está fora do ar. */
 const TERMOS_DE_SONDAGEM = 4;
+/** De quantos em quantos termos a busca atualiza o andamento da rodada. */
+const TERMOS_POR_ANDAMENTO = 25;
 const MAXIMO_DE_ERROS_REGISTRADOS = 200;
 /** Depois de tantas falhas seguidas ao baixar itens, a API está fora do ar: para de insistir. */
 const FALHAS_SEGUIDAS_DE_ITENS = 5;
@@ -110,6 +117,9 @@ export async function executarRodada(
   const inicio = agora();
   const prazo = inicio.getTime() + cfg.tempoMaximoMs;
   const semTempo = () => agora().getTime() > prazo;
+  const prazoDaBusca =
+    inicio.getTime() + Math.min(cfg.tempoMaximoDaBuscaMs ?? cfg.tempoMaximoMs * 0.6, cfg.tempoMaximoMs);
+  const semTempoNaBusca = () => agora().getTime() > prazoDaBusca;
 
   const totais: TotaisDaRodada = {
     status: "sucesso",
@@ -170,9 +180,14 @@ export async function executarRodada(
     // -----------------------------------------------------------------------
     const candidatas = new Map<string, CompraColetada>();
     let buscaForaDoAr = cfg.fonte === "plano_b";
+    let termosSemTempo = 0;
 
     if (cfg.fonte !== "plano_b") {
-      const termos = await termosDeBusca(repositorio, cfg.limiteDeTermos);
+      const emOrdem = await termosDeBusca(repositorio, cfg.limiteDeTermos);
+      // Cada rodada começa a lista de um ponto diferente: se o tempo da busca acabar, os
+      // termos que ficam de fora não são sempre os mesmos.
+      const giro = emOrdem.length > 0 ? (Math.floor(inicio.getTime() / 3_600_000) * 37) % emOrdem.length : 0;
+      const termos = [...emOrdem.slice(giro), ...emOrdem.slice(0, giro)];
       await andamento(`buscando ${termos.length} termos no PNCP`);
       let termosComFalha = 0;
       const termosQueFalharam: string[] = [];
@@ -204,22 +219,37 @@ export async function executarRodada(
         buscaForaDoAr = true;
         avisos.push("A busca do PNCP está fora do ar; usei o plano B.");
       } else {
+        let tentados = sondagem.length;
         await emParalelo(termos.slice(TERMOS_DE_SONDAGEM), cfg.paralelasNaBusca, async (termo) => {
-          if (!semTempo()) await buscarTermo(termo);
+          if (semTempoNaBusca()) {
+            termosSemTempo++;
+            return;
+          }
+          await buscarTermo(termo);
+          tentados++;
+          if (tentados % TERMOS_POR_ANDAMENTO === 0) {
+            await andamento(`buscando termos no PNCP: ${tentados} de ${termos.length}`);
+          }
         });
         // Segunda passada, uma chamada por vez, nos termos que falharam: as quedas de
         // conexão do PNCP costumam vir em rajadas e passar em seguida.
-        if (termosQueFalharam.length > 0 && !semTempo()) {
+        if (termosQueFalharam.length > 0 && !semTempoNaBusca()) {
           const repetir = termosQueFalharam.splice(0);
           termosComFalha = 0;
           falhas.length = falhasRegistradas; // só conta como erro o que falhar de novo
           await andamento(`repetindo ${repetir.length} termos que falharam na busca`);
           await emParalelo(repetir, 1, async (termo) => {
-            if (!semTempo()) await buscarTermo(termo);
+            if (semTempoNaBusca()) termosComFalha++;
+            else await buscarTermo(termo);
           });
         }
         totais.fonte = "busca";
         if (termosComFalha > 0) avisos.push(`${termosComFalha} de ${termos.length} termos falharam na busca.`);
+        if (termosSemTempo > 0) {
+          avisos.push(
+            `O tempo da busca acabou: ${termosSemTempo} de ${termos.length} termos ficaram para a próxima rodada.`,
+          );
+        }
         // Muita falha na busca: complementa com o plano B.
         if (termosComFalha > termos.length * 0.4 && cfg.fonte === "auto") buscaForaDoAr = true;
       }
@@ -400,7 +430,7 @@ export async function executarRodada(
     if (totais.compras_pendentes > 0) {
       avisos.push(`${totais.compras_pendentes} compras ficaram com itens pendentes.`);
     }
-    totais.status = totais.erros > 0 || semTempo() ? "parcial" : "sucesso";
+    totais.status = totais.erros > 0 || semTempo() || termosSemTempo > 0 ? "parcial" : "sucesso";
     if (totais.fonte === null || (totais.compras_encontradas === 0 && totais.erros > 0)) {
       totais.status = "erro";
       avisos.unshift("Não foi possível consultar o PNCP nesta rodada.");

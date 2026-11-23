@@ -233,6 +233,11 @@ Cuidados com o PNCP, que cai com frequência:
   gravação de cada edital é uma transação (`coletor_gravar_compra`).
 - Limites por rodada: 1.500 editais com itens baixados e 45 minutos. O que sobrar fica para
   a seguinte, começando pelas disputas mais próximas.
+- A busca pode usar no máximo 60% do tempo da rodada (27 minutos). Se o PNCP estiver lento e
+  o tempo acabar, o coletor segue para os itens com o que já achou e avisa quantos termos
+  ficaram para a rodada seguinte. A lista de termos começa de um ponto diferente a cada
+  rodada, para que os termos cortados não sejam sempre os mesmos.
+- O painel mostra o andamento dentro da busca ("buscando termos no PNCP: 125 de 294").
 
 Uma rodada **parcial** (parte das chamadas falhou) não é falha: o que faltou entra na
 próxima. Só termina como **erro** quando não consegue consultar o PNCP de jeito nenhum.

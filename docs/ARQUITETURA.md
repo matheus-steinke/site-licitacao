@@ -189,6 +189,10 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     enquanto os dados chegam. O ajuste fino (um `<Suspense>` por bloco da página, como
     descreve `node_modules/next/dist/docs/01-app/02-guides/instant-navigation.md`) fica
     para a etapa 5, quando a tela de Oportunidades for refeita.
+40. **A busca tem teto de tempo próprio** (60% da rodada) e a lista de termos gira a cada
+    rodada. Com 294 termos a busca leva uns 20 minutos num dia normal; sem o teto, num dia
+    ruim ela consumiria a rodada inteira e nenhum item seria baixado. Os termos que não
+    couberem ficam para a rodada seguinte, que começa a lista de outro ponto.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

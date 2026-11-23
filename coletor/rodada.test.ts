@@ -353,6 +353,57 @@ describe("rodada do coletor", () => {
     expect(totais.mensagem).toContain("1 de 6 termos falharam na busca");
   });
 
+  it("corta a busca quando o tempo dela acaba e segue para os itens", async () => {
+    // Cada chamada à busca "gasta" um minuto; a busca tem cinco.
+    let relogio = AGORA.getTime();
+    const termos = Array.from({ length: 12 }, (_, i) => `termo${String(i).padStart(2, "0")}`);
+    const segmentos = [{ id: "s", nome: "S", palavras_chave: termos, sinonimos: ["trocarte"], exclusoes: [] }];
+    const { pncp, chamadas, falhas } = pncpFalso({
+      busca: Object.fromEntries(termos.map((termo) => [termo, [daBusca(1)]])),
+      itens: { 1: [{ numeroItem: 1, descricao: "TROCARTE 5 MM" }] },
+    });
+    const buscar = pncp.buscar.bind(pncp);
+    pncp.buscar = async (...argumentos: Parameters<ClientePncp["buscar"]>) => {
+      relogio += 60_000;
+      return buscar(...argumentos);
+    };
+    const memoria = criarRepositorioMemoria(segmentos, () => new Date(relogio));
+    const totais = await executarRodada(
+      pncp,
+      memoria.repositorio,
+      { ...CFG, agora: () => new Date(relogio), paralelasNaBusca: 1, tempoMaximoDaBuscaMs: 5 * 60_000 },
+      falhas,
+    );
+    expect(chamadas.filter((c) => c.startsWith("busca:"))).toHaveLength(6);
+    expect(chamadas).toContain("itens:1");
+    expect(memoria.compras.get(chave(1))?.area_saude).toBe(true);
+    expect(totais).toMatchObject({ status: "parcial", fonte: "busca", termos_buscados: 6, erros: 0, compras_novas: 1 });
+    expect(totais.mensagem).toContain("O tempo da busca acabou: 6 de 12 termos ficaram para a próxima rodada.");
+  });
+
+  it("começa a lista de termos de um ponto diferente a cada rodada", async () => {
+    const termos = ["a", "b", "c", "d", "e", "f"];
+    const segmentos = [{ id: "s", nome: "S", palavras_chave: termos, sinonimos: [], exclusoes: [] }];
+    const primeiroTermo = async (quando: Date) => {
+      const { chamadas } = await rodar({ busca: {} }, criarRepositorioMemoria(segmentos, () => quando), {
+        ...CFG,
+        agora: () => quando,
+        paralelasNaBusca: 1,
+      });
+      expect(chamadas.filter((c) => c.startsWith("busca:"))).toHaveLength(termos.length);
+      return chamadas[0];
+    };
+    const duasHorasDepois = new Date(AGORA.getTime() + 2 * 3_600_000);
+    expect(await primeiroTermo(AGORA)).not.toBe(await primeiroTermo(duasHorasDepois));
+  });
+
+  it("informa o andamento dentro da busca", async () => {
+    const termos = Array.from({ length: 30 }, (_, i) => `termo${String(i).padStart(2, "0")}`);
+    const segmentos = [{ id: "s", nome: "S", palavras_chave: termos, sinonimos: [], exclusoes: [] }];
+    const { memoria } = await rodar({ busca: {} }, criarRepositorioMemoria(segmentos, () => AGORA));
+    expect(memoria.fases).toContain("buscando termos no PNCP: 25 de 30");
+  });
+
   it("com a busca fora do ar, usa o plano B e filtra pelo objeto", async () => {
     const { totais, memoria, chamadas } = await rodar({
       busca: "fora",
