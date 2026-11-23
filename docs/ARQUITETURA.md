@@ -190,8 +190,13 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
   o alerta de "lote incompleto" (etapa 5) restam a descrição do item, que em poucos casos
   cita "LOTE 1", e o texto do edital (etapa 10).
 - **Arquivos** (`.../arquivos`): `sequencialDocumento`, `titulo`, `tipoDocumentoNome`, `url`.
-- **A busca derruba conexões** quando recebe muitas chamadas seguidas: numa rodada com 4
-  chamadas simultâneas, 73 de 294 termos falharam. Por isso a busca usa 2 simultâneas e
-  repete no fim os termos que falharam.
+- **A busca derruba conexões ao acaso.** Nas rodadas reais de 22/11/2026, 73 e depois 91
+  de 294 termos falharam. Um teste com a mesma consulta repetida mostrou cerca de 65% das
+  conexões cortadas em menos de meio segundo (`UND_ERR_SOCKET`, também com `curl`), sem
+  relação com o termo nem com o ritmo. Com 4 tentativas, a chance de um termo falhar era
+  de uns 18%; com 10, cai para perto de 1%. Por isso o cliente conta as quedas de conexão
+  à parte (até 10 tentativas, espera de 0,5 s a 4 s) das falhas lentas (tempo esgotado,
+  429 e 5xx: até 4 tentativas, espera crescente), a busca usa 2 chamadas simultâneas e os
+  termos que ainda falharem são repetidos no fim, um por vez.
 - **Escala:** os 221 termos que responderam acharam 1.533 editais abertos com disputa em
   até 30 dias.

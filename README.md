@@ -216,9 +216,14 @@ global: coleta uma vez e todos os clientes enxergam.
 Cuidados com o PNCP, que cai com frequência:
 
 - Pausa de 300 ms entre chamadas, tempo limite de 30 s, no máximo 4 em paralelo (2 na
-  busca, que derruba conexões quando recebe muitas chamadas seguidas).
-- Termos que falham na busca ganham uma segunda passada no fim, um por vez.
-- Até 4 tentativas por chamada, com espera crescente, para erro de rede, 429 e 5xx.
+  busca).
+- **Conexão derrubada:** em noites ruins a busca do PNCP corta cerca de 2 em cada 3
+  conexões, ao acaso e em menos de meio segundo. Como a falha é rápida, o coletor insiste
+  até 10 vezes com espera curta (de 0,5 s a 4 s).
+- **Falhas lentas** (tempo esgotado, 429, 5xx): até 4 tentativas, com espera crescente a
+  partir de 1,5 s. As duas contagens são separadas: quedas de conexão não gastam as
+  tentativas das falhas lentas.
+- Termos que ainda assim falham na busca ganham uma segunda passada no fim, um por vez.
 - **Plano B:** se a busca estiver fora do ar, lista todas as contratações com proposta aberta
   (`/api/consulta/v1/contratacoes/proposta`) e filtra pelo objeto. É mais pesado e menos
   preciso (não enxerga os itens antes de baixar), por isso só entra quando a busca falha.

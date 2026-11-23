@@ -36,9 +36,32 @@ describe("cliente do PNCP", () => {
       { status: 200, corpo: '{"ok":true}' },
     ]);
     await expect(cliente.obterJson("/x")).resolves.toEqual({ ok: true });
-    expect(esperas).toEqual([1000, 2000, 4000]);
+    // 503 e "não é JSON" esperam 1 s e 2 s; a queda de conexão, no meio, espera pouco.
+    expect(esperas).toEqual([1000, 333, 2000]);
     expect(falhas.map((f) => f.definitiva)).toEqual([false, false, false]);
     expect(cliente.chamadas).toBe(4);
+  });
+
+  it("insiste até 10 vezes quando a conexão é derrubada, com espera curta", async () => {
+    const queda = () => Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_SOCKET" } });
+    const nove = clienteFalso([...Array.from({ length: 9 }, queda), { status: 200, corpo: '{"ok":true}' }]);
+    await expect(nove.cliente.obterJson("/x")).resolves.toEqual({ ok: true });
+    expect(nove.esperas).toEqual([333, 666, 1332, 2664, 4000, 4000, 4000, 4000, 4000]);
+
+    const dez = clienteFalso(Array.from({ length: 10 }, queda));
+    await expect(dez.cliente.obterJson("/x")).rejects.toMatchObject({ message: "fetch failed (UND_ERR_SOCKET)" });
+    expect(dez.cliente.chamadas).toBe(10);
+    expect(dez.falhas.at(-1)).toMatchObject({ tentativa: 10, definitiva: true });
+  });
+
+  it("quedas de conexão não gastam as tentativas das falhas lentas", async () => {
+    const queda = () => Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_SOCKET" } });
+    const { cliente } = clienteFalso([
+      queda(), { status: 503 }, queda(), { status: 503 }, queda(), { status: 503 }, queda(),
+      { status: 200, corpo: "{}" },
+    ]);
+    // 4 quedas + 3 erros 503 e ainda assim chega à resposta (o limite de 503 é 4).
+    await expect(cliente.obterJson("/x")).resolves.toEqual({});
   });
 
   it("desiste depois de 4 tentativas e informa a falha definitiva", async () => {
@@ -107,6 +130,7 @@ describe("mensagem de erro de conexão", () => {
     const cliente = criarClientePncp({
       pausaMs: 0,
       tentativas: 1,
+      tentativasEmQueda: 1,
       aoFalhar: (f) => falhas.push(f.mensagem),
       fetch: (async () => {
         throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } });

@@ -21,8 +21,14 @@ export type OpcoesCliente = {
   timeoutMs?: number;
   /** Folga do limite duro sobre o tempo limite, em ms. */
   folgaDoLimiteMs?: number;
-  /** Tentativas por chamada (a primeira conta). */
+  /** Tentativas por chamada (a primeira conta) para tempo esgotado, 429 e 5xx. */
   tentativas?: number;
+  /**
+   * Tentativas quando a conexão é derrubada na hora (sem resposta HTTP). O PNCP faz isso
+   * de forma aleatória, em até metade das chamadas nos dias ruins; como a queda é rápida,
+   * vale insistir mais vezes, com espera curta.
+   */
+  tentativasEmQueda?: number;
   /** Espera antes da 2ª tentativa; dobra a cada nova tentativa. */
   esperaInicialMs?: number;
   fetch?: typeof fetch;
@@ -69,6 +75,7 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
   const timeoutMs = opcoes.timeoutMs ?? 30_000;
   const folgaDoLimiteMs = opcoes.folgaDoLimiteMs ?? 5000;
   const tentativas = opcoes.tentativas ?? 4;
+  const tentativasEmQueda = Math.max(opcoes.tentativasEmQueda ?? 10, tentativas);
   const esperaInicialMs = opcoes.esperaInicialMs ?? 1500;
   const buscar = opcoes.fetch ?? fetch;
   const dormir = opcoes.dormir ?? dormirPadrao;
@@ -88,7 +95,11 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
     const url = caminho.startsWith("http") ? caminho : `${BASE_PNCP}${caminho}`;
     let ultimoErro: ErroPncp | undefined;
 
-    for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
+    // Dois limites: um para quedas de conexão (rápidas, aleatórias) e outro para as
+    // demais falhas (lentas: tempo esgotado, 429, 5xx).
+    let quedas = 0;
+    let outrasFalhas = 0;
+    for (let tentativa = 1; ; tentativa++) {
       await aguardarVez();
       chamadas++;
       let status: number | undefined;
@@ -124,12 +135,24 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
               : erro instanceof Error
                 ? mensagemComCausa(erro)
                 : String(erro);
-        // "resposta não é JSON" com status 200 costuma ser página de erro do balanceador.
-        const repetir = tentativa < tentativas && (valeTentarDeNovo(status) || mensagem === "resposta não é JSON");
+        // Queda de conexão: nenhuma resposta HTTP e não foi tempo esgotado.
+        const queda = status === undefined && !mensagem.startsWith("sem resposta em");
+        let repetir: boolean;
+        let espera: number;
+        if (queda) {
+          quedas++;
+          repetir = quedas < tentativasEmQueda;
+          espera = Math.min(Math.round(esperaInicialMs / 3) * 2 ** (quedas - 1), 4000);
+        } else {
+          outrasFalhas++;
+          // "resposta não é JSON" com status 200 costuma ser página de erro do balanceador.
+          repetir = outrasFalhas < tentativas && (valeTentarDeNovo(status) || mensagem === "resposta não é JSON");
+          espera = esperaInicialMs * 2 ** (outrasFalhas - 1);
+        }
         ultimoErro = new ErroPncp(mensagem, url, status);
         opcoes.aoFalhar?.({ url, status, mensagem, tentativa, definitiva: !repetir });
         if (!repetir) break;
-        await dormir(esperaInicialMs * 2 ** (tentativa - 1));
+        await dormir(espera);
       }
     }
     throw ultimoErro ?? new ErroPncp("falha desconhecida", url);
