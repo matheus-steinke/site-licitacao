@@ -7,7 +7,8 @@
 //   pnpm coletor -- --simular seg.json não grava nada; lê os segmentos de um arquivo JSON
 //
 // Variáveis de ambiente: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-// e opcionais COLETOR_PAUSA_MS, COLETOR_PARALELAS, COLETOR_MAX_COMPRAS, COLETOR_MINUTOS.
+// e opcionais COLETOR_PAUSA_MS, COLETOR_PARALELAS, COLETOR_PARALELAS_BUSCA,
+// COLETOR_MAX_COMPRAS, COLETOR_MINUTOS.
 
 import { readFileSync } from "node:fs";
 
@@ -59,6 +60,7 @@ async function principal() {
     origem: temArgumento("manual") ? "manual" : "agendado",
     fonte: fonte === "busca" || fonte === "plano_b" ? fonte : "auto",
     paralelas: numero(process.env.COLETOR_PARALELAS, CONFIGURACAO_PADRAO.paralelas),
+    paralelasNaBusca: numero(process.env.COLETOR_PARALELAS_BUSCA, CONFIGURACAO_PADRAO.paralelasNaBusca),
     maximoDeCompras: numero(process.env.COLETOR_MAX_COMPRAS, CONFIGURACAO_PADRAO.maximoDeCompras),
     tempoMaximoMs: numero(process.env.COLETOR_MINUTOS, 45) * 60 * 1000,
     limiteDeTermos: argumento("termos") ? numero(argumento("termos"), 5) : undefined,

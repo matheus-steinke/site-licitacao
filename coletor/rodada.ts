@@ -22,8 +22,10 @@ export type ConfiguracaoDaRodada = {
   modalidades: number[];
   /** Só disputas de hoje até hoje + N dias. */
   diasAFrente: number;
-  /** Requisições simultâneas ao PNCP. */
+  /** Requisições simultâneas ao PNCP (itens, arquivos, detalhe, plano B). */
   paralelas: number;
+  /** Requisições simultâneas na busca, que derruba conexões quando recebe muitas seguidas. */
+  paralelasNaBusca: number;
   /** Máximo de compras com itens baixados por rodada (o resto fica para a próxima). */
   maximoDeCompras: number;
   /** Máximo de compras já conhecidas conferidas no detalhe por rodada. */
@@ -42,6 +44,7 @@ export const CONFIGURACAO_PADRAO: ConfiguracaoDaRodada = {
   modalidades: [6, 8],
   diasAFrente: 30,
   paralelas: 4,
+  paralelasNaBusca: 2,
   maximoDeCompras: 1500,
   maximoDeVerificacoes: 400,
   tempoMaximoMs: 45 * 60 * 1000,
@@ -161,6 +164,7 @@ export async function executarRodada(
       const termos = await termosDeBusca(repositorio, cfg.limiteDeTermos);
       await andamento(`buscando ${termos.length} termos no PNCP`);
       let termosComFalha = 0;
+      const termosQueFalharam: string[] = [];
 
       const buscarTermo = async (termo: string) => {
         try {
@@ -178,19 +182,31 @@ export async function executarRodada(
         } catch (erro) {
           if (!(erro instanceof ErroPncp)) throw erro;
           termosComFalha++;
+          termosQueFalharam.push(termo);
         }
       };
 
       // Sondagem: se os primeiros termos falharem todos, nem tenta os outros.
       const sondagem = termos.slice(0, TERMOS_DE_SONDAGEM);
-      await emParalelo(sondagem, cfg.paralelas, buscarTermo);
+      await emParalelo(sondagem, cfg.paralelasNaBusca, buscarTermo);
       if (sondagem.length > 0 && termosComFalha === sondagem.length) {
         buscaForaDoAr = true;
         avisos.push("A busca do PNCP está fora do ar; usei o plano B.");
       } else {
-        await emParalelo(termos.slice(TERMOS_DE_SONDAGEM), cfg.paralelas, async (termo) => {
+        await emParalelo(termos.slice(TERMOS_DE_SONDAGEM), cfg.paralelasNaBusca, async (termo) => {
           if (!semTempo()) await buscarTermo(termo);
         });
+        // Segunda passada, uma chamada por vez, nos termos que falharam: as quedas de
+        // conexão do PNCP costumam vir em rajadas e passar em seguida.
+        if (termosQueFalharam.length > 0 && !semTempo()) {
+          const repetir = termosQueFalharam.splice(0);
+          termosComFalha = 0;
+          falhas.length = falhasRegistradas; // só conta como erro o que falhar de novo
+          await andamento(`repetindo ${repetir.length} termos que falharam na busca`);
+          await emParalelo(repetir, 1, async (termo) => {
+            if (!semTempo()) await buscarTermo(termo);
+          });
+        }
         totais.fonte = "busca";
         if (termosComFalha > 0) avisos.push(`${termosComFalha} de ${termos.length} termos falharam na busca.`);
         // Muita falha na busca: complementa com o plano B.

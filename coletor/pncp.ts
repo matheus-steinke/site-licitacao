@@ -38,6 +38,13 @@ function valeTentarDeNovo(status: number | undefined): boolean {
   return status === undefined || status === 408 || status === 429 || status >= 500;
 }
 
+/** "fetch failed" sozinho não diz nada: junta o motivo real (ECONNRESET, ETIMEDOUT...). */
+function mensagemComCausa(erro: Error): string {
+  const causa = (erro as { cause?: { code?: string; message?: string } }).cause;
+  const detalhe = causa?.code ?? causa?.message;
+  return detalhe ? `${erro.message} (${detalhe})` : erro.message;
+}
+
 /** Rejeita se a tarefa não terminar no prazo. */
 function comLimite<T>(ms: number, tarefa: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -115,7 +122,7 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
             : erro instanceof Error && (erro.name === "TimeoutError" || erro.message === "tempo esgotado")
               ? `sem resposta em ${timeoutMs / 1000}s`
               : erro instanceof Error
-                ? erro.message
+                ? mensagemComCausa(erro)
                 : String(erro);
         // "resposta não é JSON" com status 200 costuma ser página de erro do balanceador.
         const repetir = tentativa < tentativas && (valeTentarDeNovo(status) || mensagem === "resposta não é JSON");

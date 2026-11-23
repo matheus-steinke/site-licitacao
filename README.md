@@ -215,7 +215,9 @@ global: coleta uma vez e todos os clientes enxergam.
 
 Cuidados com o PNCP, que cai com frequência:
 
-- Pausa de 300 ms entre chamadas, no máximo 4 em paralelo, tempo limite de 30 s.
+- Pausa de 300 ms entre chamadas, tempo limite de 30 s, no máximo 4 em paralelo (2 na
+  busca, que derruba conexões quando recebe muitas chamadas seguidas).
+- Termos que falham na busca ganham uma segunda passada no fim, um por vez.
 - Até 4 tentativas por chamada, com espera crescente, para erro de rede, 429 e 5xx.
 - **Plano B:** se a busca estiver fora do ar, lista todas as contratações com proposta aberta
   (`/api/consulta/v1/contratacoes/proposta`) e filtra pelo objeto. É mais pesado e menos
@@ -254,8 +256,8 @@ SUPABASE_URL=https://SEU-PROJETO.supabase.co SUPABASE_SERVICE_ROLE_KEY=... pnpm 
 
 Opções: `--fonte busca|plano_b`, `--termos N` (só os N primeiros termos) e
 `--simular segmentos.json` (não grava nada; lê os segmentos de um arquivo JSON). Ajustes por
-variável de ambiente: `COLETOR_PAUSA_MS`, `COLETOR_PARALELAS`, `COLETOR_MAX_COMPRAS` e
-`COLETOR_MINUTOS`.
+variável de ambiente: `COLETOR_PAUSA_MS`, `COLETOR_PARALELAS`, `COLETOR_PARALELAS_BUSCA`,
+`COLETOR_MAX_COMPRAS` e `COLETOR_MINUTOS`.
 
 ### Casamento de texto (sem IA)
 

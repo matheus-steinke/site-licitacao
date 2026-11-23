@@ -63,6 +63,10 @@ function doDetalhe(sequencial: number, extras: Partial<ContratacaoPncp> = {}): C
 
 type Mundo = {
   busca?: Record<string, ItemBusca[]> | "fora";
+  /** Termos cuja primeira busca falha (queda de conexão passageira). */
+  buscaFalhaNaPrimeira?: string[];
+  /** Termos cuja busca falha sempre. */
+  buscaFalhaSempre?: string[];
   itens?: Record<number, ItemPncp[] | "fora">;
   arquivos?: Record<number, ArquivoPncp[] | "fora">;
   detalhes?: Record<number, ContratacaoPncp>;
@@ -84,6 +88,10 @@ function pncpFalso(mundo: Mundo) {
     async buscar(termo: string, pagina: number) {
       chamadas.push(`busca:${termo}:${pagina}`);
       if (mundo.busca === "fora" || !mundo.busca) return falhar(`https://pncp.gov.br/api/search/?q=${termo}`);
+      const jaTentou = chamadas.filter((c) => c === `busca:${termo}:${pagina}`).length > 1;
+      if (mundo.buscaFalhaSempre?.includes(termo) || (mundo.buscaFalhaNaPrimeira?.includes(termo) && !jaTentou)) {
+        return falhar(`https://pncp.gov.br/api/search/?q=${termo}`);
+      }
       const itens = mundo.busca[termo] ?? [];
       return { items: pagina === 1 ? itens : [], total: itens.length };
     },
@@ -270,6 +278,28 @@ describe("rodada do coletor", () => {
     });
     expect(memoria.compras.get(chave(1))).toMatchObject({ area_saude: true, arquivos: [] });
     expect(totais).toMatchObject({ status: "parcial", erros: 1, compras_novas: 1 });
+  });
+
+  it("repete, no fim da busca, os termos que falharam; só conta como erro o que falhar de novo", async () => {
+    const segmentos = [
+      { id: "s", nome: "S", palavras_chave: ["a1", "a2", "a3", "a4", "trocarte", "zz"], sinonimos: [], exclusoes: [] },
+    ];
+    const { totais, memoria, chamadas } = await rodar(
+      {
+        busca: { trocarte: [daBusca(1)] },
+        buscaFalhaNaPrimeira: ["trocarte"],
+        buscaFalhaSempre: ["zz"],
+        itens: { 1: [{ numeroItem: 1, descricao: "TROCARTE 5 MM" }] },
+      },
+      criarRepositorioMemoria(segmentos, () => AGORA),
+    );
+    expect(chamadas.filter((c) => c === "busca:trocarte:1")).toHaveLength(2);
+    expect(chamadas.filter((c) => c === "busca:zz:1")).toHaveLength(2);
+    expect(memoria.fases).toContain("repetindo 2 termos que falharam na busca");
+    expect(memoria.compras.get(chave(1))?.area_saude).toBe(true);
+    // O termo que se recuperou não vira erro; o que falhou duas vezes, sim.
+    expect(totais).toMatchObject({ status: "parcial", fonte: "busca", termos_buscados: 5, erros: 1, compras_novas: 1 });
+    expect(totais.mensagem).toContain("1 de 6 termos falharam na busca");
   });
 
   it("com a busca fora do ar, usa o plano B e filtra pelo objeto", async () => {

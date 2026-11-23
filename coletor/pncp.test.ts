@@ -101,6 +101,22 @@ describe("cliente do PNCP", () => {
   });
 });
 
+describe("mensagem de erro de conexão", () => {
+  it("inclui o motivo real junto de 'fetch failed'", async () => {
+    const falhas: string[] = [];
+    const cliente = criarClientePncp({
+      pausaMs: 0,
+      tentativas: 1,
+      aoFalhar: (f) => falhas.push(f.mensagem),
+      fetch: (async () => {
+        throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } });
+      }) as typeof fetch,
+    });
+    await expect(cliente.obterJson("/x")).rejects.toMatchObject({ message: "fetch failed (ECONNRESET)" });
+    expect(falhas).toEqual(["fetch failed (ECONNRESET)"]);
+  });
+});
+
 describe("limite duro de tempo", () => {
   it("desiste de uma chamada que nunca responde e tenta de novo", async () => {
     let chamadas = 0;
