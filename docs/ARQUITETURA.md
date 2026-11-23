@@ -156,6 +156,17 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 30. **Chave de serviço do Supabase só no GitHub Actions**, como segredo. O app web continua
     usando apenas a chave pública.
 
+31. **Na descrição de um item, o casamento não exige palavras próximas.** A primeira rodada
+    real descartou editais de seringas e aventais porque muitos órgãos usam o formato do
+    catálogo federal, com as palavras do termo distantes. A proximidade ficou só para
+    textos longos.
+32. **Reclassificação automática:** cada compra guarda um resumo da regra com que foi
+    classificada (`classificacao_versao`). Se os segmentos ou o casamento mudam, a rodada
+    seguinte baixa os itens de novo e reclassifica, inclusive o que foi descartado.
+33. **Busca com 2 chamadas simultâneas e segunda passada** nos termos que falham.
+34. **Falha no banco não encerra a rodada:** gravações são repetidas e, se uma falhar de
+    vez, a compra fica para a próxima rodada.
+
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 
 - **Busca** (`/api/search/`): aceita `modalidades=6|8` e `ufs=PR|SC`; devolve

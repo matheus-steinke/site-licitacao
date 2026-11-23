@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { contemTermo, prepararTermo, prepararTexto, singular, tokenizar } from "./normalizar";
-import { casarSegmentos, prepararSegmentos } from "./segmentos";
+import { contemTermo, prepararTermo, prepararTexto, radical, singular, tokenizar } from "./normalizar";
+import { assinaturaDaClassificacao, casarSegmentos, prepararSegmentos } from "./segmentos";
 
 const casa = (texto: string, termo: string) => contemTermo(prepararTexto(texto), prepararTermo(termo)!);
+const casaNoItem = (texto: string, termo: string) =>
+  contemTermo(prepararTexto(texto), prepararTermo(termo)!, { proximas: false });
 
 describe("tokenizar", () => {
   it("tira acento, pontuação, palavras vazias e plural", () => {
     expect(tokenizar("Cateteres Duplo-J, 6Fr x 26 cm (estéril)")).toEqual([
-      "cateter", "duplo", "j", "6fr", "x", "26", "cm", "esteril",
+      "cateter", "dupl", "j", "6fr", "x", "26", "cm", "esteril",
     ]);
-    expect(tokenizar("SONDA DE FOLEY 2 VIAS Nº 16")).toEqual(["sonda", "foley", "2", "via", "n", "16"]);
+    expect(tokenizar("SONDA DE FOLEY 2 VIAS Nº 16")).toEqual(["sond", "foley", "2", "via", "n", "16"]);
     expect(tokenizar("  ")).toEqual([]);
   });
 
@@ -20,6 +22,17 @@ describe("tokenizar", () => {
     ]);
     // Palavras curtas, com dígitos ou terminadas em "ss" ficam como estão.
     expect(["gas", "uti", "0s3", "glass"].map(singular)).toEqual(["gas", "uti", "0s3", "glass"]);
+  });
+});
+
+describe("radical", () => {
+  it("iguala gênero e pequenas variações, sem mexer em palavras curtas ou com número", () => {
+    expect(radical("endoscopio")).toBe(radical("endoscopia"));
+    expect(radical("cirurgicas")).toBe(radical("cirurgico"));
+    expect(radical("seringas")).toBe("sering");
+    expect(["fio", "guia", "gaze", "uti", "6fr", "cateter", "descartavel"].map(radical)).toEqual([
+      "fio", "guia", "gaze", "uti", "6fr", "cateter", "descartavel",
+    ]);
   });
 });
 
@@ -57,6 +70,27 @@ describe("contemTermo", () => {
   });
 });
 
+describe("contemTermo na descrição de um item (sem exigir proximidade)", () => {
+  it("casa descrições no formato do catálogo federal, com as palavras distantes", () => {
+    const seringa =
+      "SERINGA - ADICIONAL: GRADUADA (ESCALA ML), NUMERADA; APRESENTAÇÃO: EMBALAGEM INDIVIDUAL; CAPACIDADE: 1 ML; ESTERILIDADE: ESTÉRIL, DESCARTÁVEL";
+    expect(casa(seringa, "seringa descartável")).toBe(false);
+    expect(casaNoItem(seringa, "seringa descartável")).toBe(true);
+    expect(
+      casaNoItem(
+        "Avental Procedimento - Paramentação esterilidade: não estéril, descartável, material: não tecido 100% polipropileno",
+        "avental descartável",
+      ),
+    ).toBe(true);
+    expect(casaNoItem("BOCAL, para endoscopio, em polipropileno, com faixa para cabeca", "bocal para endoscopia")).toBe(true);
+  });
+
+  it("continua exigindo todas as palavras, inteiras", () => {
+    expect(casaNoItem("SERINGA DE VIDRO REUTILIZÁVEL", "seringa descartável")).toBe(false);
+    expect(casaNoItem("MATERIAL UTILIZADO EM OBRAS", "uti")).toBe(false);
+  });
+});
+
 describe("casarSegmentos", () => {
   const segmentos = prepararSegmentos([
     {
@@ -83,5 +117,28 @@ describe("casarSegmentos", () => {
   it("não casa o que não é da saúde", () => {
     expect(casarSegmentos("CANETA ESFEROGRÁFICA AZUL", segmentos)).toEqual([]);
     expect(casarSegmentos("", segmentos)).toEqual([]);
+  });
+});
+
+describe("assinaturaDaClassificacao", () => {
+  const base = [
+    { id: "b", nome: "B", palavras_chave: ["trocarte"], sinonimos: [], exclusoes: [] },
+    { id: "a", nome: "A", palavras_chave: ["Sonda de Foley", "cateter duplo j"], sinonimos: ["pigtail"], exclusoes: [] },
+  ];
+
+  it("não muda com a ordem, a caixa ou o nome do segmento", () => {
+    const mesma = [
+      { id: "a", nome: "Outro nome", palavras_chave: ["cateter duplo j", "sonda de foley"], sinonimos: ["pigtail"], exclusoes: [] },
+      { id: "b", nome: "B", palavras_chave: ["trocarte"], sinonimos: [], exclusoes: [] },
+    ];
+    expect(assinaturaDaClassificacao(mesma)).toBe(assinaturaDaClassificacao(base));
+  });
+
+  it("muda quando um termo entra, sai ou troca de lista", () => {
+    const comExclusao = base.map((s) => (s.id === "a" ? { ...s, exclusoes: ["veterinário"] } : s));
+    const semSinonimo = base.map((s) => (s.id === "a" ? { ...s, sinonimos: [] } : s));
+    expect(assinaturaDaClassificacao(comExclusao)).not.toBe(assinaturaDaClassificacao(base));
+    expect(assinaturaDaClassificacao(semSinonimo)).not.toBe(assinaturaDaClassificacao(base));
+    expect(assinaturaDaClassificacao(base.slice(0, 1))).not.toBe(assinaturaDaClassificacao(base));
   });
 });

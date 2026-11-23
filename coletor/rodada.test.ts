@@ -235,6 +235,57 @@ describe("rodada do coletor", () => {
     expect(memoria.compras.get(chave(1))?.area_saude).toBe(true);
   });
 
+  it("reclassifica o que já foi coletado quando um segmento é editado", async () => {
+    const segmentos = structuredClone(SEGMENTOS);
+    const memoria = criarRepositorioMemoria(segmentos, () => AGORA);
+    const mundo = {
+      busca: { trocarte: [daBusca(1), daBusca(2)] },
+      itens: {
+        1: [{ numeroItem: 1, descricao: "TROCARTE 5 MM" }],
+        2: [{ numeroItem: 1, descricao: "BOLSA DE COLOSTOMIA" }],
+      },
+    };
+    await rodar(mundo, memoria);
+    expect(memoria.compras.get(chave(2))?.area_saude).toBe(false);
+
+    // Sem mudança de regra, nada é baixado de novo.
+    const semMudanca = await rodar(mundo, memoria);
+    expect(semMudanca.chamadas.filter((c) => c.startsWith("itens"))).toEqual([]);
+
+    // O admin acrescenta um termo: as duas compras são reavaliadas, e a descartada entra.
+    segmentos[0].palavras_chave.push("bolsa de colostomia");
+    const depois = await rodar({ ...mundo, busca: { ...mundo.busca, "bolsa de colostomia": [daBusca(2)] } }, memoria);
+    expect(depois.chamadas.filter((c) => c.startsWith("itens")).sort()).toEqual(["itens:1", "itens:2"]);
+    expect(memoria.compras.get(chave(2))).toMatchObject({ area_saude: true, segmento_ids: ["uro"] });
+    expect(depois.totais).toMatchObject({ compras_novas: 0, compras_atualizadas: 2, status: "sucesso" });
+
+    // E a partir daí volta a não repetir.
+    const estavel = await rodar({ ...mundo, busca: { ...mundo.busca, "bolsa de colostomia": [daBusca(2)] } }, memoria);
+    expect(estavel.chamadas.filter((c) => c.startsWith("itens"))).toEqual([]);
+  });
+
+  it("casa itens descritos no formato do catálogo federal (palavras distantes)", async () => {
+    const segmentos = [
+      { id: "c", nome: "Consumo", palavras_chave: ["seringa descartável"], sinonimos: [], exclusoes: [] },
+    ];
+    const { memoria } = await rodar(
+      {
+        busca: { "seringa descartável": [daBusca(1)] },
+        itens: {
+          1: [
+            {
+              numeroItem: 1,
+              descricao:
+                "SERINGA - ADICIONAL: GRADUADA (ESCALA ML), NUMERADA; APRESENTAÇÃO: EMBALAGEM INDIVIDUAL; CAPACIDADE: 1 ML; ESTERILIDADE: ESTÉRIL, DESCARTÁVEL",
+            },
+          ],
+        },
+      },
+      criarRepositorioMemoria(segmentos, () => AGORA),
+    );
+    expect(memoria.compras.get(chave(1))).toMatchObject({ area_saude: true, segmento_ids: ["c"] });
+  });
+
   it("com a API de itens fora do ar, guarda a compra como pendente e tenta de novo depois", async () => {
     const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
     const primeira = await rodar({ busca: { trocarte: [daBusca(1)] }, itens: { 1: "fora" } }, memoria);

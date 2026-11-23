@@ -1,6 +1,12 @@
 // Normalização de texto e casamento de termos, sem IA.
 // É a base do filtro "área da saúde" do coletor e da triagem por catálogo.
 
+/**
+ * Mude este número sempre que a regra de casamento mudar: o coletor reclassifica o que
+ * já foi coletado quando a versão (ou os segmentos) muda.
+ */
+export const VERSAO_DO_CASAMENTO = 2;
+
 /** Palavras que não ajudam a distinguir um produto de outro. */
 const VAZIAS = new Set([
   "a", "o", "as", "os", "de", "da", "do", "das", "dos", "e", "em", "no", "na", "nos", "nas",
@@ -25,8 +31,19 @@ export function singular(palavra: string): string {
 }
 
 /**
+ * Forma de comparação de uma palavra: singular e sem a vogal final, para que gênero e
+ * pequenas variações não atrapalhem (endoscópio/endoscopia, cirúrgico/cirúrgica).
+ * Palavras curtas e com números ficam como estão.
+ */
+export function radical(palavra: string): string {
+  const base = singular(palavra);
+  if (base.length <= 4 || /\d/.test(base)) return base;
+  return /[aeo]$/.test(base) ? base.slice(0, -1) : base;
+}
+
+/**
  * Texto -> lista de palavras comparáveis: minúsculas, sem acento, sem pontuação,
- * sem palavras vazias e no singular. "Cateteres Duplo-J, 6Fr" -> ["cateter","duplo","j","6fr"].
+ * sem palavras vazias e reduzidas ao radical. "Cateteres Duplo-J, 6Fr" -> ["cateter","dupl","j","6fr"].
  */
 export function tokenizar(texto: string): string[] {
   const limpo = texto
@@ -39,7 +56,7 @@ export function tokenizar(texto: string): string[] {
   return limpo
     .split(" ")
     .filter((palavra) => !VAZIAS.has(palavra))
-    .map(singular);
+    .map(radical);
 }
 
 /** Um termo já preparado para comparação. */
@@ -68,23 +85,33 @@ export function prepararTexto(texto: string): TextoPreparado {
   return { palavras, posicoes };
 }
 
-/** Quantas palavras "de sobra" podem aparecer entre as palavras do termo. */
+/** Quantas palavras "de sobra" podem aparecer entre as palavras do termo, no modo "proximas". */
 const FOLGA = 3;
 
+export type OpcoesDeCasamento = {
+  /**
+   * true (padrão): as palavras do termo precisam estar próximas. Use em textos longos, que
+   * falam de várias coisas (objeto do edital, texto do edital).
+   * false: basta todas aparecerem. Use na descrição de UM item, em que tudo se refere ao
+   * mesmo produto. Muitos órgãos descrevem assim: "SERINGA - ADICIONAL: GRADUADA; ...;
+   * ESTERILIDADE: ESTÉRIL, DESCARTÁVEL".
+   */
+  proximas?: boolean;
+};
+
 /**
- * true se todas as palavras do termo aparecem no texto, inteiras e próximas
- * umas das outras (em qualquer ordem). Assim "cateter duplo j" casa com
- * "CATETER URETERAL DUPLO J 6FR", mas não com um texto em que "cateter" e
- * "duplo" estão em itens diferentes de uma lista longa.
+ * true se todas as palavras do termo aparecem inteiras no texto (em qualquer ordem) e, no
+ * modo "proximas", perto umas das outras. "cateter duplo j" casa com
+ * "CATETER URETERAL DUPLO J 6FR"; "uti" não casa com "utilizado".
  */
-export function contemTermo(texto: TextoPreparado, termo: Termo): boolean {
+export function contemTermo(texto: TextoPreparado, termo: Termo, opcoes: OpcoesDeCasamento = {}): boolean {
   const listas: number[][] = [];
   for (const palavra of termo.palavras) {
     const lista = texto.posicoes.get(palavra);
     if (!lista) return false;
     listas.push(lista);
   }
-  if (listas.length === 1) return true;
+  if (listas.length === 1 || opcoes.proximas === false) return true;
 
   const janela = termo.palavras.length + FOLGA;
   // Para cada ocorrência da primeira palavra, as demais precisam cair na mesma janela.
@@ -94,6 +121,10 @@ export function contemTermo(texto: TextoPreparado, termo: Termo): boolean {
 }
 
 /** Primeiro termo da lista que aparece no texto (ou undefined). */
-export function primeiroTermo(texto: TextoPreparado, termos: Termo[]): Termo | undefined {
-  return termos.find((termo) => contemTermo(texto, termo));
+export function primeiroTermo(
+  texto: TextoPreparado,
+  termos: Termo[],
+  opcoes: OpcoesDeCasamento = {},
+): Termo | undefined {
+  return termos.find((termo) => contemTermo(texto, termo, opcoes));
 }

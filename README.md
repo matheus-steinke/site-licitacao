@@ -259,12 +259,27 @@ Opções: `--fonte busca|plano_b`, `--termos N` (só os N primeiros termos) e
 variável de ambiente: `COLETOR_PAUSA_MS`, `COLETOR_PARALELAS`, `COLETOR_PARALELAS_BUSCA`,
 `COLETOR_MAX_COMPRAS` e `COLETOR_MINUTOS`.
 
+### Quando um segmento é editado
+
+Cada edital guarda com qual regra foi classificado (os termos de todos os segmentos mais a
+versão do casamento de texto). Se você editar um segmento em Admin > Segmentos, a rodada
+seguinte percebe a diferença, baixa de novo os itens dos editais abertos e reclassifica
+tudo, inclusive o que tinha sido descartado. Com muitos editais isso leva mais de uma
+rodada (limite de 1.500 por rodada); até lá vale a classificação anterior.
+
 ### Casamento de texto (sem IA)
 
 O mesmo código ([`src/lib/texto`](src/lib/texto)) serve ao coletor e servirá à triagem:
-minúsculas, sem acento, sem pontuação, sem preposições e no singular. Um termo casa quando
-todas as palavras dele aparecem inteiras e próximas no texto, em qualquer ordem. Assim
-"cateter duplo j" casa com "CATETER URETERAL DUPLO J 6FR", e "uti" não casa com "utilizado".
+minúsculas, sem acento, sem pontuação, sem preposições, no singular e sem a vogal final
+(para "endoscópio" e "endoscopia" ou "cirúrgico" e "cirúrgica" contarem como iguais).
+
+- Na **descrição de um item**, um termo casa quando todas as palavras dele aparecem
+  inteiras, em qualquer posição. Muitos órgãos descrevem no formato do catálogo federal
+  ("SERINGA - ADICIONAL: GRADUADA; ...; ESTERILIDADE: ESTÉRIL, DESCARTÁVEL"), com as
+  palavras longe umas das outras.
+- Em **textos longos** (o objeto, no plano B), as palavras precisam estar próximas, para não
+  juntar pedaços de assuntos diferentes.
+- Sempre palavras inteiras: "uti" não casa com "utilizado".
 
 ## Painel ADMIN
 

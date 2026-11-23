@@ -1,8 +1,15 @@
 // Uma rodada do coletor: descobre editais no PNCP, baixa os itens, mantém só o
 // que é da área da saúde e atualiza situação e datas do que já conhecemos.
 
+import { createHash } from "node:crypto";
+
 import { prepararTexto } from "../src/lib/texto/normalizar";
-import { casarSegmentos, prepararSegmentos, type SegmentoPreparado } from "../src/lib/texto/segmentos";
+import {
+  assinaturaDaClassificacao,
+  casarSegmentos,
+  prepararSegmentos,
+  type SegmentoPreparado,
+} from "../src/lib/texto/segmentos";
 import {
   mapearArquivo,
   mapearBusca,
@@ -141,10 +148,14 @@ export async function executarRodada(
   };
 
   try {
-    const segmentos = prepararSegmentos(await repositorio.listarSegmentosAtivos());
+    const segmentosBrutos = await repositorio.listarSegmentosAtivos();
+    const segmentos = prepararSegmentos(segmentosBrutos);
     if (segmentos.every((s) => s.termos.length === 0)) {
       throw new Error("Nenhum segmento ativo com palavras-chave.");
     }
+    // Identifica a regra de classificação em vigor. Compra classificada com outra regra
+    // (segmento editado no admin, casamento de texto alterado) é classificada de novo.
+    const versao = createHash("sha256").update(assinaturaDaClassificacao(segmentosBrutos)).digest("hex").slice(0, 16);
 
     const janelaInicio = inicio.toISOString();
     const janelaFim = new Date(inicio.getTime() + cfg.diasAFrente * 86_400_000).toISOString();
@@ -273,7 +284,9 @@ export async function executarRodada(
         !!conhecida?.itens_coletados_em &&
         !!compra.pncp_atualizado_em &&
         compra.pncp_atualizado_em > conhecida.itens_coletados_em;
-      const precisaDosItens = forcarItens || !conhecida || conhecida.area_saude === null || retificada;
+      const regraMudou = !!conhecida && conhecida.area_saude !== null && conhecida.classificacao_versao !== versao;
+      const precisaDosItens =
+        forcarItens || !conhecida || conhecida.area_saude === null || retificada || regraMudou;
 
       if (!precisaDosItens) {
         // Fora da saúde e sem novidade: não há o que gravar.
@@ -284,7 +297,9 @@ export async function executarRodada(
 
       if (baixadas >= cfg.maximoDeCompras || semTempo() || itensForaDoAr()) {
         totais.compras_pendentes++;
-        if (!conhecida) contar(await gravar({ compra }));
+        // Sem os itens novos, grava só o cabeçalho; o que já estava classificado continua
+        // valendo até a próxima rodada.
+        if (!conhecida || conhecida.area_saude !== false) contar(await gravar({ compra }));
         return;
       }
       baixadas++;
@@ -295,7 +310,8 @@ export async function executarRodada(
         itens = brutos.flatMap((bruto) => {
           const item = mapearItem(bruto);
           if (!item) return [];
-          const casamentos = casarSegmentos(prepararTexto(item.descricao), segmentos);
+          // Na descrição de um item tudo se refere ao mesmo produto: não exige proximidade.
+          const casamentos = casarSegmentos(prepararTexto(item.descricao), segmentos, { proximas: false });
           return [{ ...item, segmento_ids: casamentos.map((c) => c.segmentoId) }];
         });
         falhasSeguidasDeItens = 0;
@@ -324,7 +340,7 @@ export async function executarRodada(
 
       const gravacao = await gravar({
         compra,
-        classificacao: { area_saude: areaSaude, segmento_ids: segmentoIds },
+        classificacao: { area_saude: areaSaude, segmento_ids: segmentoIds, versao },
         // Fora da saúde não guardamos os itens: a linha serve só para não baixar de novo.
         itens: areaSaude ? itens : [],
         arquivos,
@@ -370,6 +386,7 @@ export async function executarRodada(
         area_saude: null,
         itens_coletados_em: null,
         tentativas_itens: 0,
+        classificacao_versao: null,
       });
     }
     await revisitar(pendentes, true);

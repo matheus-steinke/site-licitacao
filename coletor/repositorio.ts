@@ -12,11 +12,18 @@ export type CompraConhecida = {
   area_saude: boolean | null;
   itens_coletados_em: string | null;
   tentativas_itens: number;
+  /** Com qual regra de classificação os itens foram avaliados (null = nunca). */
+  classificacao_versao: string | null;
 };
 
 export type CompraParaVerificar = { controle_pncp: string; orgao_cnpj: string; ano: number; sequencial: number };
 
-export type ClassificacaoDaCompra = { area_saude: boolean; segmento_ids: string[] };
+export type ClassificacaoDaCompra = {
+  area_saude: boolean;
+  segmento_ids: string[];
+  /** Resumo da regra usada (ver assinaturaDaClassificacao). */
+  versao: string;
+};
 export type ItemComSegmentos = ItemColetado & { segmento_ids: string[] };
 
 export type Gravacao = {
@@ -207,7 +214,7 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
         const { data, error } = await tentarNoBanco(() =>
           supabase
             .from("compras")
-            .select("controle_pncp, area_saude, itens_coletados_em, tentativas_itens")
+            .select("controle_pncp, area_saude, itens_coletados_em, tentativas_itens, classificacao_versao")
             .in("controle_pncp", lote),
         );
         if (error) falhar("compras conhecidas", error.message);
@@ -220,12 +227,29 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
       // Gravar de novo a mesma compra dá o mesmo resultado, então repetir é seguro.
       const { data, error } = await tentarNoBanco(() =>
         supabase.rpc("coletor_gravar_compra", {
-          p_compra: { ...compra, ...classificacao, falha_itens: falhaItens ?? false },
+          p_compra: {
+            ...compra,
+            area_saude: classificacao?.area_saude,
+            segmento_ids: classificacao?.segmento_ids,
+            falha_itens: falhaItens ?? false,
+          },
           p_itens: itens ?? null,
           p_arquivos: arquivos ?? null,
         }),
       );
       if (error) falhar(`gravar ${compra.controle_pncp}`, error.message);
+
+      if (itens && classificacao) {
+        // Marca com qual regra a compra foi classificada. Se esta gravação falhar, o único
+        // efeito é a compra ser baixada e classificada de novo na próxima rodada.
+        const { error: erroVersao } = await tentarNoBanco(() =>
+          supabase
+            .from("compras")
+            .update({ classificacao_versao: classificacao.versao })
+            .eq("controle_pncp", compra.controle_pncp),
+        );
+        if (erroVersao) console.error("não consegui marcar a versão da classificação:", resumirErro(erroVersao.message));
+      }
       return data as ResultadoGravacao;
     },
 
@@ -246,6 +270,7 @@ export type CompraEmMemoria = {
   itens_coletados_em: string | null;
   tentativas_itens: number;
   verificado_em: string | null;
+  classificacao_versao: string | null;
 };
 
 export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () => Date = () => new Date()) {
@@ -295,6 +320,7 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
             area_saude: c.area_saude,
             itens_coletados_em: c.itens_coletados_em,
             tentativas_itens: c.tentativas_itens,
+            classificacao_versao: c.classificacao_versao,
           });
         }
       }
@@ -313,6 +339,7 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
           itens_coletados_em: itens ? momento : null,
           tentativas_itens: falhaItens ? 1 : 0,
           verificado_em: momento,
+          classificacao_versao: itens ? (classificacao?.versao ?? null) : null,
         });
         return { resultado: "nova", alteracoes: 0 };
       }
@@ -336,6 +363,7 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
         antiga.area_saude = classificacao?.area_saude ?? false;
         antiga.segmento_ids = classificacao?.segmento_ids ?? [];
         antiga.itens_coletados_em = momento;
+        antiga.classificacao_versao = classificacao?.versao ?? null;
       }
       if (arquivos) antiga.arquivos = arquivos;
       if (falhaItens) antiga.tentativas_itens++;

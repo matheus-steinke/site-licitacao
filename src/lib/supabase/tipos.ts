@@ -292,6 +292,7 @@ export type Database = {
         Row: {
           ano: number
           area_saude: boolean | null
+          classificacao_versao: string | null
           atualizado_em: string
           codigo_ibge: string | null
           coletado_em: string
@@ -327,6 +328,7 @@ export type Database = {
         Insert: {
           ano: number
           area_saude?: boolean | null
+          classificacao_versao?: string | null
           atualizado_em?: string
           codigo_ibge?: string | null
           coletado_em?: string
@@ -362,6 +364,7 @@ export type Database = {
         Update: {
           ano?: number
           area_saude?: boolean | null
+          classificacao_versao?: string | null
           atualizado_em?: string
           codigo_ibge?: string | null
           coletado_em?: string
