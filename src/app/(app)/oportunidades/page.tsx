@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { CabecalhoPagina } from "@/components/app/cabecalho-pagina";
 import { AcoesDaOportunidade } from "@/components/oportunidades/acoes";
 import { ChipsDeAlerta } from "@/components/oportunidades/alertas";
+import { EtiquetaDeSegmento } from "@/components/oportunidades/etiqueta-de-segmento";
 import { AtualizadorDeTriagem } from "@/components/oportunidades/atualizador-de-triagem";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +21,7 @@ import {
   type OportunidadeResumo,
 } from "@/lib/dados/oportunidades";
 import { formatarDataHora, formatarDiaSemana, formatarMoeda } from "@/lib/formato";
-import { exigirOrganizacao, listarSegmentosAtivos } from "@/lib/organizacao";
+import { exigirOrganizacao, listarSegmentosDeInteresse, type SegmentoDeInteresse } from "@/lib/organizacao";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { situacaoDaTriagem } from "@/lib/triagem/executar";
 import { cn } from "@/lib/utils";
@@ -53,9 +54,12 @@ function plural(n: number, um: string, varios: string): string {
   return `${n} ${n === 1 ? um : varios}`;
 }
 
-function Cartao({ op, segmentos }: { op: OportunidadeResumo; segmentos: Map<string, string> }) {
+function Cartao({ op, segmentos }: { op: OportunidadeResumo; segmentos: SegmentoDeInteresse[] }) {
   const situacaoAnormal = op.situacaoId !== 1;
-  const nomesDosSegmentos = op.segmentoIds.flatMap((id) => segmentos.get(id) ?? []);
+  // Segmentos de interesse da empresa presentes nesta licitação, cada um com a sua cor.
+  const dosSegmentos = segmentos.filter((s) => op.segmentoIds.includes(s.id));
+  // Triagens antigas não têm a contagem por segmento: mostra só o nome até refazer.
+  const temContagem = Object.keys(op.itensPorSegmento).length > 0;
 
   return (
     <li className="rounded-xl border bg-card p-4 shadow-xs" data-testid="oportunidade">
@@ -94,12 +98,14 @@ function Cartao({ op, segmentos }: { op: OportunidadeResumo; segmentos: Map<stri
         {op.itensAVerificar > 0 ? (
           <Badge variant="secondary">{plural(op.itensAVerificar, "item a verificar", "itens a verificar")}</Badge>
         ) : null}
-        {op.itensCompativeis === 0 && op.itensAVerificar === 0 && op.itensDoSegmento > 0 ? (
-          <Badge variant="outline">
-            {nomesDosSegmentos.length > 0 ? nomesDosSegmentos.join(", ") : "Segmento de interesse"}:{" "}
-            {plural(op.itensDoSegmento, "item", "itens")}
-          </Badge>
-        ) : null}
+        {dosSegmentos.map((segmento) => (
+          <EtiquetaDeSegmento
+            key={segmento.id}
+            nome={segmento.nome}
+            posicao={segmento.posicao}
+            quantidade={temContagem ? (op.itensPorSegmento[segmento.id] ?? 0) : undefined}
+          />
+        ))}
         {op.prioridade === 0 ? <Badge variant="outline">Sem itens do catálogo hoje</Badge> : null}
         <ChipsDeAlerta alertas={op.alertas} />
       </div>
@@ -181,13 +187,12 @@ async function Lista({ searchParams }: { searchParams: Parametros }) {
   const soCatalogo = parametros.catalogo === "1";
 
   const supabase = await criarClienteServidor();
-  const [situacao, lista, totalProdutos, segmentosAtivos] = await Promise.all([
+  const [situacao, lista, totalProdutos, segmentos] = await Promise.all([
     situacaoDaTriagem(supabase, org.id),
     listarOportunidades(org.id, aba, soCatalogo),
     contarProdutos(org.id),
-    listarSegmentosAtivos(),
+    listarSegmentosDeInteresse(org.id),
   ]);
-  const segmentos = new Map(segmentosAtivos.map((s) => [s.id, s.nome]));
   const triando = situacao.desatualizada || situacao.pendentes > 0;
   const soExemplos = lista.oportunidades.length > 0 && lista.oportunidades.every((op) => op.exemplo);
 

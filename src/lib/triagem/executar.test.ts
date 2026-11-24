@@ -82,6 +82,7 @@ describe("execução da triagem em lotes", () => {
     expect(gravacao).toMatchObject({ p_org: "org-1", p_config_em: LOTE.config_em, p_marca_ate: LOTE.marca_ate });
     const resultados = gravacao.p_resultados as { compra_id: string; prioridade: number; itens: unknown[] }[];
     expect(resultados.map((x) => [x.compra_id, x.prioridade])).toEqual([["c1", 3], ["c2", 1], ["c3", 0]]);
+    expect(resultados[1]).toMatchObject({ itens_do_segmento: 1, itens_por_segmento: { "seg-uro": 1 } });
     expect(resultados[0]).toMatchObject({
       itens_compativeis: 1,
       valor_estimado: 2000,

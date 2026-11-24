@@ -1,7 +1,7 @@
 import "server-only";
 
 import { linkDoPncp } from "@/lib/dados/compras";
-import { listarSegmentosAtivos, listarSegmentosDaOrganizacao } from "@/lib/organizacao";
+import { listarSegmentosDeInteresse } from "@/lib/organizacao";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/tipos";
 import { contemTermo, prepararTermos, prepararTexto } from "@/lib/texto/normalizar";
@@ -23,6 +23,14 @@ export type OportunidadeResumo = Awaited<ReturnType<typeof listarOportunidades>>
 
 type Linha = Database["public"]["Views"]["oportunidades_lista"]["Row"];
 
+/** {"<id do segmento>": quantidade}, como a triagem grava. */
+function lerContagem(valor: unknown): Record<string, number> {
+  if (typeof valor !== "object" || valor === null || Array.isArray(valor)) return {};
+  return Object.fromEntries(
+    Object.entries(valor).flatMap(([id, n]) => (typeof n === "number" && n > 0 ? [[id, n] as const] : [])),
+  );
+}
+
 function resumir(linha: Linha, agora: number) {
   const disputa = linha.data_disputa ? new Date(linha.data_disputa).getTime() : null;
   return {
@@ -37,6 +45,7 @@ function resumir(linha: Linha, agora: number) {
     itensAVerificar: linha.itens_a_verificar ?? 0,
     itensDoSegmento: linha.itens_do_segmento ?? 0,
     segmentoIds: linha.segmento_ids ?? [],
+    itensPorSegmento: lerContagem(linha.itens_por_segmento),
     valorEstimado: Number(linha.valor_estimado ?? 0),
     alertas: lerAlertas(linha.alertas),
     controlePncp: linha.controle_pncp ?? "",
@@ -147,8 +156,9 @@ export async function obterOportunidade(orgId: string, id: string) {
   if (error) throw new Error(`Falha ao carregar a oportunidade: ${error.message}`);
   if (!linha?.compra_id) return null;
 
-  const idsDaEmpresa = await listarSegmentosDaOrganizacao(orgId);
-  const [casados, itens, arquivos, compra, doSegmento, exclusoes, segmentosAtivos] = await Promise.all([
+  const deInteresse = await listarSegmentosDeInteresse(orgId);
+  const idsDaEmpresa = deInteresse.map((s) => s.id);
+  const [casados, itens, arquivos, compra, doSegmento, exclusoes] = await Promise.all([
     supabase
       .from("oportunidade_itens")
       .select(
@@ -186,7 +196,6 @@ export async function obterOportunidade(orgId: string, id: string) {
           .in("segmento_id", idsDaEmpresa)
           .limit(LIMITE_DE_ITENS_DE_SEGMENTO),
     supabase.from("organizacao_exclusoes").select("termo").eq("org_id", orgId),
-    listarSegmentosAtivos(),
   ]);
   const falha = casados.error ?? itens.error ?? arquivos.error ?? compra.error ?? doSegmento.error ?? exclusoes.error;
   if (falha) throw new Error(`Falha ao carregar os itens da oportunidade: ${falha.message}`);
@@ -215,18 +224,12 @@ export async function obterOportunidade(orgId: string, id: string) {
     segmentosDoItem.get(item.id)?.push(linhaDoSegmento.segmento_id);
   }
   // A ordem dos segmentos (e a cor de cada um) é a da lista de segmentos, não a da licitação.
-  const ordem = new Map(segmentosAtivos.map((s, indice) => [s.id, indice]));
-  const daEmpresa = idsDaEmpresa
-    .filter((idDoSegmento) => ordem.has(idDoSegmento))
-    .sort((a, b) => (ordem.get(a) ?? 0) - (ordem.get(b) ?? 0));
-  for (const lista of segmentosDoItem.values()) lista.sort((a, b) => daEmpresa.indexOf(a) - daEmpresa.indexOf(b));
+  const posicao = new Map(deInteresse.map((s) => [s.id, s.posicao]));
+  for (const lista of segmentosDoItem.values()) lista.sort((a, b) => (posicao.get(a) ?? 0) - (posicao.get(b) ?? 0));
   for (const item of itensDeSegmento.values()) item.segmentoIds = segmentosDoItem.get(item.id) ?? [];
-  const nomes = new Map(segmentosAtivos.map((s) => [s.id, s.nome]));
-  const segmentosDaEmpresa: SegmentoDaEmpresa[] = daEmpresa.map((idDoSegmento, posicao) => ({
-    id: idDoSegmento,
-    nome: nomes.get(idDoSegmento) ?? "Segmento",
-    posicao,
-    itens: [...segmentosDoItem.values()].filter((lista) => lista.includes(idDoSegmento)).length,
+  const segmentosDaEmpresa: SegmentoDaEmpresa[] = deInteresse.map((segmento) => ({
+    ...segmento,
+    itens: [...segmentosDoItem.values()].filter((lista) => lista.includes(segmento.id)).length,
   }));
 
   const compativeis: ItemCompativel[] = (casados.data ?? [])

@@ -72,3 +72,16 @@ export async function listarSegmentosAtivos() {
   if (error) throw new Error(`Falha ao carregar os segmentos: ${error.message}`);
   return data;
 }
+
+/** Um segmento de interesse da empresa. A posição define a cor dele nas telas. */
+export type SegmentoDeInteresse = { id: string; nome: string; posicao: number };
+
+/**
+ * Segmentos de interesse da empresa, na ordem da lista de segmentos. Como a cor vem da
+ * posição, cada segmento tem a mesma cor em todas as telas e licitações.
+ */
+export async function listarSegmentosDeInteresse(orgId: string): Promise<SegmentoDeInteresse[]> {
+  const [ativos, daEmpresa] = await Promise.all([listarSegmentosAtivos(), listarSegmentosDaOrganizacao(orgId)]);
+  const escolhidos = new Set(daEmpresa);
+  return ativos.filter((s) => escolhidos.has(s.id)).map((s, posicao) => ({ id: s.id, nome: s.nome, posicao }));
+}

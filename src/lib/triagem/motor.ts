@@ -17,7 +17,7 @@ import { FRACAS, marcasDoCatalogo, prepararProduto, type ProdutoBruto, type Prod
  * Mude este número sempre que a regra da triagem mudar: as organizações são triadas de
  * novo quando a versão gravada nelas é diferente desta.
  */
-export const VERSAO_DA_TRIAGEM = 1;
+export const VERSAO_DA_TRIAGEM = 2;
 
 export const LIMITES_PADRAO = { compativel: 60, verificar: 50 };
 
@@ -98,6 +98,8 @@ export type ResultadoDaTriagem = {
   /** Itens dos segmentos da organização (já sem os excluídos). */
   itensDoSegmento: number;
   segmentoIds: string[];
+  /** Itens por segmento de interesse. Um item de dois segmentos conta nos dois. */
+  itensPorSegmento: Record<string, number>;
   /** Soma de quantidade x valor de referência dos itens compatíveis. */
   valorEstimado: number;
   alertas: Alerta[];
@@ -385,7 +387,7 @@ const ALERTAS_DO_OBJETO: [Extract<Alerta, { tipo: "amostra" | "comodato" | "visi
 export function triarCompra(triagem: TriagemPreparada, compra: CompraParaTriar): ResultadoDaTriagem {
   const { configuracao } = triagem;
   const itens: ItemTriado[] = [];
-  const segmentos = new Set<string>();
+  const porSegmento = new Map<string, number>();
   let itensDoSegmento = 0;
   let valorEstimado = 0;
   const lotes = new Map<string, { todos: number[]; compativeis: Set<number> }>();
@@ -406,7 +408,7 @@ export function triarCompra(triagem: TriagemPreparada, compra: CompraParaTriar):
     const doSegmento = item.segmentoIds.filter((id) => triagem.segmentoIds.has(id));
     if (doSegmento.length > 0) {
       itensDoSegmento++;
-      for (const id of doSegmento) segmentos.add(id);
+      for (const id of new Set(doSegmento)) porSegmento.set(id, (porSegmento.get(id) ?? 0) + 1);
     }
 
     // Candidatos: produtos cujo nome tem a primeira palavra do item, e os que têm palavra-chave no item.
@@ -501,7 +503,8 @@ export function triarCompra(triagem: TriagemPreparada, compra: CompraParaTriar):
     itensCompativeis: compativeis.length,
     itensAVerificar: itens.length - compativeis.length,
     itensDoSegmento,
-    segmentoIds: [...segmentos].sort(),
+    segmentoIds: [...porSegmento.keys()].sort(),
+    itensPorSegmento: Object.fromEntries([...porSegmento].sort(([a], [b]) => a.localeCompare(b))),
     valorEstimado: Number(valorEstimado.toFixed(2)),
     alertas: prioridade === 0 ? [] : alertas,
   };

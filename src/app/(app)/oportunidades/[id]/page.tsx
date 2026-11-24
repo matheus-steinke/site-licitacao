@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AcoesDaOportunidade } from "@/components/oportunidades/acoes";
 import { AlternarItens } from "@/components/oportunidades/alternar-itens";
 import { ChipDeAlerta, ChipsDeAlerta } from "@/components/oportunidades/alertas";
+import { EtiquetaDeSegmento } from "@/components/oportunidades/etiqueta-de-segmento";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,18 +46,6 @@ function Dado({ rotulo, children }: { rotulo: string; children: React.ReactNode 
   );
 }
 
-/** Etiqueta colorida com o nome do segmento (a cor nunca é a única pista: o nome vai junto). */
-function EtiquetaDeSegmento({ segmento, quantidade }: { segmento: SegmentoDaEmpresa; quantidade?: number }) {
-  const cor = corDoSegmento(segmento.posicao);
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium", cor.etiqueta)}>
-      <span className={cn("size-2 shrink-0 rounded-full", cor.ponto)} aria-hidden />
-      {segmento.nome}
-      {quantidade === undefined ? null : <span className="tabular-nums opacity-80">· {quantidade}</span>}
-    </span>
-  );
-}
-
 /** As etiquetas dos segmentos de um item, logo abaixo da descrição. */
 function SegmentosDoItem({ ids, segmentos }: { ids: string[]; segmentos: Map<string, SegmentoDaEmpresa> }) {
   if (ids.length === 0) return null;
@@ -64,7 +53,7 @@ function SegmentosDoItem({ ids, segmentos }: { ids: string[]; segmentos: Map<str
     <span className="mt-1.5 flex flex-wrap gap-1">
       {ids.flatMap((id) => {
         const segmento = segmentos.get(id);
-        return segmento ? [<EtiquetaDeSegmento key={id} segmento={segmento} />] : [];
+        return segmento ? [<EtiquetaDeSegmento key={id} nome={segmento.nome} posicao={segmento.posicao} />] : [];
       })}
     </span>
   );
@@ -385,7 +374,12 @@ async function Detalhe({ params }: { params: Promise<{ id: string }> }) {
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {comItens.map((segmento) => (
-                <EtiquetaDeSegmento key={segmento.id} segmento={segmento} quantidade={segmento.itens} />
+                <EtiquetaDeSegmento
+                  key={segmento.id}
+                  nome={segmento.nome}
+                  posicao={segmento.posicao}
+                  quantidade={segmento.itens}
+                />
               ))}
             </div>
           </div>

@@ -91,6 +91,7 @@ function paraOBanco(compraId: string, r: ResultadoDaTriagem) {
     itens_a_verificar: r.itensAVerificar,
     itens_do_segmento: r.itensDoSegmento,
     segmento_ids: r.segmentoIds,
+    itens_por_segmento: r.itensPorSegmento,
     valor_estimado: r.valorEstimado,
     alertas: r.alertas,
     itens: r.itens.map((item) => ({

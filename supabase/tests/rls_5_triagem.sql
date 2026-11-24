@@ -135,7 +135,7 @@ select teste.espera(
 -- compra de outro estado. Só o que é legítimo entra.
 select public.triagem_gravar(:'org_a', :'config_em', :'marca_ate', format($$[
   {"compra_id":"%s","prioridade":3,"score":95,"itens_compativeis":1,"itens_a_verificar":0,"itens_do_segmento":1,
-   "segmento_ids":["%s"],"valor_estimado":1500,"alertas":[{"tipo":"amostra"}],
+   "segmento_ids":["%s"],"itens_por_segmento":{"segmento-de-teste":1},"valor_estimado":1500,"alertas":[{"tipo":"amostra"}],
    "itens":[
      {"item_id":"%s","produto_id":"%s","nivel":"compativel","score":95,"detalhe":{"cobertura":1},"alertas":["exclusivo_me_epp"],"lote":"1"},
      {"item_id":"%s","produto_id":"%s","nivel":"compativel","score":90,"detalhe":{},"alertas":[],"lote":null},
@@ -151,6 +151,9 @@ select teste.espera(
      and alertas = '[{"tipo":"amostra"}]' and segmento_ids = array[:'seg_uro'::uuid]
    from public.oportunidades where id = :'op_sc'),
   'a oportunidade nasce como nova, com score, valor, segmentos e alertas');
+select teste.espera(
+  (select itens_por_segmento = '{"segmento-de-teste":1}' from public.oportunidades_lista where id = :'op_sc'),
+  'a contagem de itens por segmento é gravada e aparece na lista');
 select teste.espera(
   (select count(*) = 1 and bool_and(item_id = :'item_sc1' and produto_id = :'produto_a' and lote = '1' and alertas = '{exclusivo_me_epp}')
    from public.oportunidade_itens where oportunidade_id = :'op_sc'),
@@ -232,6 +235,9 @@ select public.triagem_gravar(:'org_a', (:'lote'::jsonb ->> 'config_em')::timesta
 select teste.espera(
   (select status = 'aprovada' and prioridade = 0 and itens_compativeis = 0 from public.oportunidades where id = :'op_sc'),
   'oportunidade já decidida não some quando deixa de casar');
+select teste.espera(
+  (select itens_por_segmento = '{}' from public.oportunidades where id = :'op_sc'),
+  'e a contagem por segmento é zerada');
 select teste.espera(
   (select count(*) from public.oportunidade_itens where oportunidade_id = :'op_sc') = 0, 'mas fica sem itens');
 

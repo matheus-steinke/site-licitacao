@@ -378,6 +378,10 @@ laboratório, fio guia de intubação). O que resolve, na ordem:
 
 ### Itens dos seus segmentos, pintados
 
+Cada segmento de interesse da empresa tem **uma cor**, a mesma em todas as telas. No cartão
+da lista, cada segmento presente na licitação aparece numa etiqueta colorida com a
+quantidade de itens ("Urologia/Endourologia · 14 itens").
+
 Na página de detalhe, os itens que pertencem aos segmentos de interesse da empresa aparecem
 pintados, com **uma cor por segmento**, uma faixa na borda e uma etiqueta com o nome do
 segmento. Uma legenda mostra quantos itens há de cada um, e o botão "Só dos meus segmentos"

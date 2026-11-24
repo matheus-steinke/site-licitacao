@@ -53,7 +53,7 @@ Leitura para qualquer usuário logado; escrita só pelo coletor (service role) o
 | `produtos` | ID do cliente (único na organização), referência, produto, preço proposta, lance mínimo e colunas opcionais | → `segmentos` |
 | `produto_arquivos` | catálogo técnico, registro ANVISA (caminho no Storage) | → `produtos` |
 | `importacoes` | arquivo, modo, relatório do que entrou, mudou e deu erro | — |
-| `oportunidades` | status, motivo do descarte, quem e quando decidiu, prioridade (catálogo, verificar ou segmento), score, contagens de itens, segmentos, alertas, valor estimado; única por organização e compra | → `compras` |
+| `oportunidades` | status, motivo do descarte, quem e quando decidiu, prioridade (catálogo, verificar ou segmento), score, contagens de itens (total e por segmento), segmentos, alertas, valor estimado; única por organização e compra | → `compras` |
 | `oportunidade_itens` | item, produto sugerido, nível (compatível ou verificar), score e detalhe do casamento, alertas, lote | → `oportunidades`, `compra_itens`, `produtos` |
 | `buscas_salvas` | nome e filtros | — |
 | `integracoes` | provedor, conta, credenciais cifradas, agenda e pasta-raiz | — |
@@ -250,6 +250,12 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     segmentos; a etiqueta com o nome acompanha a cor, para não depender só dela. Os itens
     dos segmentos são carregados à parte, sem o limite de 300 da lista geral, e o filtro
     "Só dos meus segmentos" troca na própria tela, sem recarregar.
+58. **Contagem por segmento gravada na oportunidade** (`itens_por_segmento`), para o cartão
+    da lista mostrar uma etiqueta colorida por segmento com a quantidade de itens (pedido
+    em 24/11/2026). A triagem já sabia a contagem; antes gravava só o total. Contar na hora
+    da listagem exigiria reaplicar as exclusões da empresa em milhares de itens a cada
+    abertura da tela. A versão do motor passou para 2, o que refaz a triagem de todas as
+    organizações na próxima rodada ou ao abrir Oportunidades.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

@@ -245,6 +245,23 @@ describe("exclusões e segmentos", () => {
       item("SERINGA 10 ML", { segmentoIds: [CONSUMO] }),
     ]);
     expect(r).toMatchObject({ prioridade: 1, itensDoSegmento: 1, segmentoIds: [URO], itens: [] });
+    expect(r.itensPorSegmento).toEqual({ [URO]: 1 });
+  });
+
+  it("conta os itens de cada segmento de interesse", () => {
+    const r = triar(
+      [
+        item("SONDA URETRAL Nº 12", { segmentoIds: [URO] }),
+        item("SONDA DE FOLEY 2 VIAS", { segmentoIds: [URO, CONSUMO] }),
+        item("SERINGA 10 ML", { segmentoIds: [CONSUMO] }),
+        item("LUVA DE PROCEDIMENTO", { segmentoIds: [CONSUMO] }),
+        item("CANETA ESFEROGRÁFICA"),
+      ],
+      configuracao({ segmentoIds: [URO, CONSUMO] }),
+    );
+    // O item de dois segmentos conta nos dois, mas uma vez só no total.
+    expect(r.itensPorSegmento).toEqual({ [CONSUMO]: 3, [URO]: 2 });
+    expect(r).toMatchObject({ itensDoSegmento: 4, segmentoIds: [CONSUMO, URO] });
   });
 
   it("licitação de outro segmento e sem item do catálogo não é oportunidade", () => {

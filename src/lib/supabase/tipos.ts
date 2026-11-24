@@ -616,6 +616,7 @@ export type Database = {
           itens_a_verificar: number
           itens_compativeis: number
           itens_do_segmento: number
+          itens_por_segmento: Json
           motivo_descarte: string | null
           org_id: string
           prioridade: number
@@ -636,6 +637,7 @@ export type Database = {
           itens_a_verificar?: number
           itens_compativeis?: number
           itens_do_segmento?: number
+          itens_por_segmento?: Json
           motivo_descarte?: string | null
           org_id: string
           prioridade: number
@@ -656,6 +658,7 @@ export type Database = {
           itens_a_verificar?: number
           itens_compativeis?: number
           itens_do_segmento?: number
+          itens_por_segmento?: Json
           motivo_descarte?: string | null
           org_id?: string
           prioridade?: number
@@ -1006,6 +1009,7 @@ export type Database = {
           itens_a_verificar: number | null
           itens_compativeis: number | null
           itens_do_segmento: number | null
+          itens_por_segmento: Json | null
           modalidade_nome: string | null
           motivo_descarte: string | null
           municipio: string | null
