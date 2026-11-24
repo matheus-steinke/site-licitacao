@@ -15,7 +15,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 3 | Catálogo e importação de Excel/CSV | Pronta |
 | 4 | Coletor do PNCP | Pronta |
 | 5 | Triagem e Oportunidades | Pronta |
-| 6 | Busca | A fazer |
+| 6 | Busca | Pronta |
 | 7 | Dashboard | A fazer |
 | 8 | Integrações Google Agenda e Drive | A fazer |
 | 9 | E-mail diário, excluir conta, testes de RLS completos | A fazer |
@@ -140,6 +140,7 @@ Dados por organização (um usuário só enxerga a própria organização):
 | `produto_arquivos` | lê, inclui e exclui | lê, inclui e exclui | nada |
 | `importacoes` | lê e registra | lê e registra | nada |
 | `oportunidades`, `oportunidade_itens` | lê | lê | nada |
+| `buscas_salvas` | lê, salva e exclui | lê, salva e exclui | nada |
 | Storage `produtos` (arquivos) | só a pasta da própria organização | idem | nada |
 
 Criação de organização e aceite de convite passam por funções do banco
@@ -394,6 +395,37 @@ Nova → Aprovada (agendada) ou Descartada (com motivo). Depois da data da dispu
 aparece como **Disputada** (não é um status gravado) e pode ser marcada como Ganha ou
 Perdida. Tudo pode ser desfeito.
 
+## Busca
+
+A tela de Busca pesquisa em **todas** as licitações da área da saúde coletadas do PNCP, não
+só nas oportunidades da empresa.
+
+- **Palavra-chave:** procura no objeto e na descrição dos itens. Todas as palavras precisam
+  aparecer no mesmo item (ou no objeto). Acento e maiúsculas não importam, e a palavra vale
+  pelo começo: "cateter" acha "cateteres", "uretero" acha "ureteroscópio". Palavras de
+  ligação ("de", "para", "com") são ignoradas. Cada resultado mostra quantos itens têm o
+  termo e até três deles.
+- **Filtros:** estados (padrão: os da empresa), segmentos, período da disputa (padrão: de
+  hoje em diante), modalidade, situação no PNCP e "só com itens do meu catálogo". Nenhum
+  estado ou segmento marcado vale como todos.
+- **Só com itens do meu catálogo** usa a triagem, que é feita nas licitações dos estados da
+  empresa com disputa futura. Em outros estados o filtro não encontra nada.
+- **Buscas salvas:** guardam a palavra-chave e os filtros com um nome, para todos os
+  usuários da empresa (até 30). "De hoje em diante" continua valendo como hoje no dia em
+  que a busca salva é aberta.
+- **Abrir detalhes:** se a licitação é uma oportunidade da empresa, abre a página da
+  oportunidade. Senão, abre a mesma página sem as ações e sem os itens do catálogo, com os
+  itens dos segmentos da empresa pintados.
+
+Os filtros ficam no endereço da página (`/busca?q=...&ufs=SC`), então um link de busca pode
+ser copiado e enviado a um colega.
+
+No banco, a busca usa um índice de texto do Postgres (`to_tsvector` com as palavras sem
+acento) na descrição dos itens e no objeto. A função `buscar_licitacoes` roda com as
+permissões de quem chama: uma empresa nunca vê as oportunidades de outra.
+
+A **busca do catálogo** também deixou de diferenciar acentos: "canula" acha "CÂNULA".
+
 ## Painel ADMIN
 
 Disponível para quem está em `admins_plataforma`, pelo item "Admin" do menu:
@@ -472,6 +504,7 @@ src/lib/               Supabase, autenticação, formatação, acesso a dados
 src/lib/importacao/    leitura e validação da tabela de preços (Excel/CSV)
 src/lib/texto/         normalização e casamento de termos (coletor e triagem)
 src/lib/triagem/       motor da triagem (medidas, pontuação, alertas) e execução em lotes
+src/lib/busca/         filtros da tela de Busca (leitura do endereço, buscas salvas)
 coletor/               coletor do PNCP e triagem por organização (rodam no GitHub Actions)
 .github/workflows/     agendamento do coletor e da triagem
 src/proxy.ts           renova a sessão e redireciona visitantes para o login

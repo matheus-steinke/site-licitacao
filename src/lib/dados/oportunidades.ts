@@ -34,9 +34,9 @@ function lerContagem(valor: unknown): Record<string, number> {
 function resumir(linha: Linha, agora: number) {
   const disputa = linha.data_disputa ? new Date(linha.data_disputa).getTime() : null;
   return {
-    id: linha.id as string,
+    id: linha.id ?? "",
     compraId: linha.compra_id as string,
-    status: linha.status as StatusOportunidade,
+    status: linha.status ?? ("nova" as StatusOportunidade),
     motivoDescarte: linha.motivo_descarte,
     decididoEm: linha.decidido_em,
     prioridade: linha.prioridade ?? 0,
@@ -155,33 +155,105 @@ export async function obterOportunidade(orgId: string, id: string) {
     .maybeSingle();
   if (error) throw new Error(`Falha ao carregar a oportunidade: ${error.message}`);
   if (!linha?.compra_id) return null;
+  return carregarDetalhe(supabase, orgId, linha as Linha, id);
+}
 
+/**
+ * Uma licitação aberta pela Busca. Se ela é uma oportunidade da organização, devolve só o id
+ * da oportunidade (a página de oportunidade mostra mais). Senão, devolve o detalhe sem os
+ * itens do catálogo. null se a licitação não existe ou não é da área da saúde.
+ */
+export async function obterLicitacao(orgId: string, compraId: string) {
+  const supabase = await criarClienteServidor();
+  const [oportunidade, compra] = await Promise.all([
+    supabase.from("oportunidades").select("id").eq("org_id", orgId).eq("compra_id", compraId).maybeSingle(),
+    supabase
+      .from("compras")
+      .select(
+        `id, controle_pncp, orgao_cnpj, ano, sequencial, numero_compra, uf, municipio, modalidade_nome, objeto,
+         situacao_id, data_disputa, valor_total_estimado, exemplo, segmento_ids,
+         orgao:orgaos (razao_social), itens:compra_itens (count)`,
+      )
+      .eq("id", compraId)
+      .eq("area_saude", true)
+      .maybeSingle(),
+  ]);
+  const erro = oportunidade.error ?? compra.error;
+  if (erro) throw new Error(`Falha ao carregar a licitação: ${erro.message}`);
+  if (oportunidade.data) return { oportunidadeId: oportunidade.data.id } as const;
+  if (!compra.data) return null;
+
+  const c = compra.data;
+  const linha: Linha = {
+    id: null,
+    org_id: orgId,
+    compra_id: c.id,
+    status: null,
+    motivo_descarte: null,
+    decidido_em: null,
+    prioridade: 0,
+    score: 0,
+    itens_compativeis: 0,
+    itens_a_verificar: 0,
+    itens_do_segmento: 0,
+    itens_por_segmento: {},
+    segmento_ids: [],
+    valor_estimado: 0,
+    alertas: [],
+    triada_em: null,
+    criado_em: null,
+    controle_pncp: c.controle_pncp,
+    orgao_cnpj: c.orgao_cnpj,
+    ano: c.ano,
+    sequencial: c.sequencial,
+    numero_compra: c.numero_compra,
+    uf: c.uf,
+    municipio: c.municipio,
+    modalidade_nome: c.modalidade_nome,
+    objeto: c.objeto,
+    situacao_id: c.situacao_id,
+    data_disputa: c.data_disputa,
+    valor_total_estimado: c.valor_total_estimado,
+    exemplo: c.exemplo,
+    orgao_nome: c.orgao?.razao_social ?? null,
+    total_itens: c.itens[0]?.count ?? 0,
+  };
+  return { detalhe: await carregarDetalhe(supabase, orgId, linha, null) } as const;
+}
+
+type Cliente = Awaited<ReturnType<typeof criarClienteServidor>>;
+
+/** Itens (do catálogo, dos segmentos e os demais), arquivos e dados do edital de uma compra. */
+async function carregarDetalhe(supabase: Cliente, orgId: string, linha: Linha, oportunidadeId: string | null) {
+  const compraId = linha.compra_id as string;
   const deInteresse = await listarSegmentosDeInteresse(orgId);
   const idsDaEmpresa = deInteresse.map((s) => s.id);
   const [casados, itens, arquivos, compra, doSegmento, exclusoes] = await Promise.all([
-    supabase
-      .from("oportunidade_itens")
-      .select(
-        `nivel, score, detalhe, alertas, lote,
-         item:compra_itens (id, numero_item, descricao, quantidade, unidade, valor_unitario_estimado),
-         produto:produtos (id, codigo, referencia, nome, preco_proposta, lance_minimo)`,
-      )
-      .eq("oportunidade_id", id),
+    oportunidadeId === null
+      ? Promise.resolve({ data: [], error: null })
+      : supabase
+          .from("oportunidade_itens")
+          .select(
+            `nivel, score, detalhe, alertas, lote,
+             item:compra_itens (id, numero_item, descricao, quantidade, unidade, valor_unitario_estimado),
+             produto:produtos (id, codigo, referencia, nome, preco_proposta, lance_minimo)`,
+          )
+          .eq("oportunidade_id", oportunidadeId),
     supabase
       .from("compra_itens")
       .select("id, numero_item, descricao, quantidade, unidade, valor_unitario_estimado")
-      .eq("compra_id", linha.compra_id)
+      .eq("compra_id", compraId)
       .order("numero_item")
       .limit(LIMITE_DE_OUTROS_ITENS + 200),
     supabase
       .from("compra_arquivos")
       .select("id, titulo, tipo_documento, url, publicado_em")
-      .eq("compra_id", linha.compra_id)
+      .eq("compra_id", compraId)
       .order("sequencial_documento"),
     supabase
       .from("compras")
       .select("processo, unidade_nome, modo_disputa, srp, data_publicacao, data_abertura_proposta, link_sistema_origem")
-      .eq("id", linha.compra_id)
+      .eq("id", compraId)
       .maybeSingle(),
     // Itens desta licitação que casaram, na coleta, com algum segmento de interesse da empresa.
     idsDaEmpresa.length === 0
@@ -192,7 +264,7 @@ export async function obterOportunidade(orgId: string, id: string) {
             `segmento_id,
              item:compra_itens!inner (id, compra_id, numero_item, descricao, quantidade, unidade, valor_unitario_estimado)`,
           )
-          .eq("item.compra_id", linha.compra_id)
+          .eq("item.compra_id", compraId)
           .in("segmento_id", idsDaEmpresa)
           .limit(LIMITE_DE_ITENS_DE_SEGMENTO),
     supabase.from("organizacao_exclusoes").select("termo").eq("org_id", orgId),
@@ -281,9 +353,11 @@ export async function obterOportunidade(orgId: string, id: string) {
     .filter((item) => !casou.has(item.id))
     .sort((a, b) => a.numero - b.numero);
 
-  const resumo = resumir(linha as Linha, Date.now());
+  const resumo = resumir(linha, Date.now());
   return {
     ...resumo,
+    /** false: licitação aberta pela Busca que não é oportunidade da organização. */
+    ehOportunidade: oportunidadeId !== null,
     compra: compra.data,
     compativeis,
     outros,
@@ -294,4 +368,4 @@ export async function obterOportunidade(orgId: string, id: string) {
   };
 }
 
-export type OportunidadeDetalhe = NonNullable<Awaited<ReturnType<typeof obterOportunidade>>>;
+export type DetalheDaCompra = Awaited<ReturnType<typeof carregarDetalhe>>;

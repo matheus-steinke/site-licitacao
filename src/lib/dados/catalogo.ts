@@ -19,6 +19,17 @@ export function limparBusca(texto: string | undefined): string {
     .slice(0, 80);
 }
 
+/** As palavras da busca do jeito que a coluna "busca" guarda: minúsculas, sem acento, só letras e números. */
+export function palavrasDaBusca(texto: string): string[] {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
 export async function listarProdutos(orgId: string, busca: string, pagina: number) {
   const supabase = await criarClienteServidor();
   const inicio = (pagina - 1) * PRODUTOS_POR_PAGINA;
@@ -32,12 +43,9 @@ export async function listarProdutos(orgId: string, busca: string, pagina: numbe
     )
     .eq("org_id", orgId);
 
-  if (busca) {
-    const padrao = `%${busca}%`;
-    consulta = consulta.or(
-      `codigo.ilike.${padrao},referencia.ilike.${padrao},nome.ilike.${padrao},marca.ilike.${padrao}`,
-    );
-  }
+  // A coluna "busca" guarda ID, referência, nome e marca em minúsculas e sem acento:
+  // "canula" acha "CÂNULA". Todas as palavras digitadas precisam aparecer.
+  for (const palavra of palavrasDaBusca(busca)) consulta = consulta.like("busca", `%${palavra}%`);
 
   const { data, count, error } = await consulta
     .order("codigo")

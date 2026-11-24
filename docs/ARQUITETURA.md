@@ -55,7 +55,7 @@ Leitura para qualquer usuário logado; escrita só pelo coletor (service role) o
 | `importacoes` | arquivo, modo, relatório do que entrou, mudou e deu erro | — |
 | `oportunidades` | status, motivo do descarte, quem e quando decidiu, prioridade (catálogo, verificar ou segmento), score, contagens de itens (total e por segmento), segmentos, alertas, valor estimado; única por organização e compra | → `compras` |
 | `oportunidade_itens` | item, produto sugerido, nível (compatível ou verificar), score e detalhe do casamento, alertas, lote | → `oportunidades`, `compra_itens`, `produtos` |
-| `buscas_salvas` | nome e filtros | — |
+| `buscas_salvas` | nome e filtros (palavra-chave, estados, segmentos, período, modalidade, situação, só catálogo); da organização | — |
 | `integracoes` | provedor, conta, credenciais cifradas, agenda e pasta-raiz | — |
 | `integracao_vinculos` | ID do evento ou da pasta já criados, para não duplicar e poder atualizar | → `oportunidades` |
 | `email_envios` | registro do e-mail diário | — |
@@ -256,6 +256,36 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     da listagem exigiria reaplicar as exclusões da empresa em milhares de itens a cada
     abertura da tela. A versão do motor passou para 2, o que refaz a triagem de todas as
     organizações na próxima rodada ou ao abrir Oportunidades.
+
+## Decisões tomadas na etapa 6
+
+59. **Busca por índice de texto do Postgres, não por trigramas.** O plano falava em `pg_trgm`,
+    mas o banco já estava com 102 MB em três dias de coleta e um índice de trigramas sobre
+    146 mil descrições ocuparia quase o tamanho da tabela. O índice de texto
+    (`to_tsvector('simple', ...)` sobre o texto sem acento) ficou com 13 MB e responde em
+    0,2 a 0,6 s. A busca por começo de palavra cobre plural e variações ("cateter" acha
+    "cateteres") sem depender de dicionário de idioma.
+60. **Todas as palavras no mesmo item (ou no objeto).** "cateter duplo j" não acha uma
+    licitação que tem "cateter" num item e "duplo" em outro. Palavras de ligação saem da
+    consulta; palavras de até 2 letras valem inteiras ("j" não acha "jelco").
+61. **A busca cobre todas as licitações da saúde, inclusive de outros estados e com disputa
+    passada.** O padrão da tela é: estados da empresa, de hoje em diante.
+62. **Filtros no endereço da página.** A tela é um formulário comum (GET): funciona sem
+    JavaScript, o link pode ser compartilhado e a busca salva guarda os mesmos filtros.
+63. **Buscas salvas são da organização**, não do usuário, e guardam "hoje" como "hoje" (não
+    a data do dia em que foram salvas). Limite de 30 por organização.
+64. **"Só com itens do meu catálogo" usa as oportunidades já triadas** (estados da empresa,
+    disputa futura). Triar sob demanda licitações de outros estados ficou fora.
+65. **Licitação que não é oportunidade tem página própria** (`/busca/licitacao/[id]`), com o
+    mesmo componente da oportunidade, sem ações e sem itens do catálogo.
+66. **Busca do catálogo sem acento** por uma coluna gerada (`produtos.busca`), com as
+    palavras do ID, da referência, do nome e da marca em minúsculas e sem acento. Fecha a
+    decisão 23.
+67. **Crescimento do banco (em aberto).** O coletor traz cerca de 200 licitações e 12 mil
+    itens por dia, uns 6 MB. O plano gratuito do Supabase tem 500 MB: no ritmo atual, enche
+    em cerca de dois meses. Falta decidir a regra de retenção (por exemplo, apagar os itens
+    de licitações com disputa encerrada há mais de 90 dias que não foram aprovadas) ou a
+    mudança de plano.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 
