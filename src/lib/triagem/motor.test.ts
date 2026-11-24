@@ -197,6 +197,20 @@ describe("item x catálogo", () => {
     expect(r.itens).toEqual([]);
   });
 
+  it("o tipo do produto citado só no meio da descrição não basta para ser compatível", () => {
+    const catalogo = [produto("1", `FRASCO COLETOR MARCA: UROLLINE / FABRICANTE: WELLEAD 140ML ${BOILERPLATE}`)];
+    const r = triar(
+      [
+        item("Sistema Coletor Para Dreno De Tórax tipo: selo d'água, modelo recipiente: frasco rígido, graduado"),
+        item("FRASCO COLETOR 140 ML, ESTÉRIL"),
+      ],
+      configuracao({ produtos: catalogo }),
+    );
+    expect(r.itens.map((i) => i.nivel)).toEqual(["verificar", "compativel"]);
+    expect(r.itens[1].score).toBe(100);
+    expect(r.itensCompativeis).toBe(1);
+  });
+
   it("tolera erro de digitação pela semelhança de escrita", () => {
     expect(semelhanca("percutanea", "perutanea")).toBeGreaterThan(0.5);
     expect(semelhanca("ureteral", "uretral")).toBeLessThan(0.8);

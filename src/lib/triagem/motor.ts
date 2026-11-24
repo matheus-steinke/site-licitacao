@@ -259,7 +259,7 @@ function avaliar(
   let pesoParecido = 0;
   let fortes = 0;
   let fortesAchadas = 0;
-  let temOTipoDoProduto: boolean | null = null;
+  let tipoDoProduto: string | null = null;
   const presencas = produto.nucleo.map((_, indice) => presenca(produto.nucleo, indice, texto, palavrasDoItem));
   // "duplo j" é uma coisa só: sem o "j" colado, o "duplo" de "duplo lúmen" não conta.
   produto.nucleo.forEach(({ palavra }, indice) => {
@@ -274,7 +274,7 @@ function avaliar(
       fortes++;
       if (achou > 0) fortesAchadas++;
       // A primeira palavra forte do nome diz o tipo do produto ("cateter", "processador").
-      temOTipoDoProduto ??= achou > 0;
+      tipoDoProduto ??= produto.nucleo[indice].palavra;
     }
   });
   const cobertura = pesoTotal > 0 ? pesoExato / pesoTotal : 0;
@@ -305,9 +305,13 @@ function avaliar(
       desconto += 0.1;
     }
     textoCasa = (0.7 * cobertura + 0.3 * similaridade) * (1 - Math.min(desconto, 0.5));
-    // O item não cita o tipo do produto (um "endoscópio" para o produto "processador de
-    // imagem para endoscópio"): só passa se o resto casar muito bem.
-    if (temOTipoDoProduto === false) textoCasa *= 0.75;
+    // O item não se apresenta com o tipo do produto: um "endoscópio" para o produto "processador
+    // de imagem para endoscópio", ou um "sistema coletor para dreno" que só cita "frasco" no
+    // meio da descrição, para o produto "frasco coletor". Só passa se o resto casar muito bem.
+    const tipo = tipoDoProduto as string | null;
+    const apresentaOTipo =
+      tipo === null || comeco.some((palavra) => palavra === tipo || semelhanca(palavra, tipo) >= 0.7);
+    if (!apresentaOTipo) textoCasa *= 0.75;
   }
 
   const { confirmadas, diferentes } = compararMedidas(produto.medidas, medidasDoItem());

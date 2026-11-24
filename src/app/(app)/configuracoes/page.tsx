@@ -10,6 +10,8 @@ import { SeletorUfs } from "@/components/organizacao/seletor-ufs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatarData } from "@/lib/formato";
 import {
   exigirOrganizacao,
@@ -20,6 +22,7 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 
 import {
   atualizarEmpresa,
+  atualizarLimitesDaTriagem,
   atualizarSegmentos,
   atualizarUfs,
   cancelarConvite,
@@ -133,7 +136,7 @@ export default async function PaginaConfiguracoes() {
     <>
       <CabecalhoPagina
         titulo="Configurações"
-        descricao="Dados da empresa, estados atendidos, segmentos e usuários."
+        descricao="Dados da empresa, estados atendidos, segmentos, triagem e usuários."
       />
 
       <div className="flex flex-col gap-5">
@@ -202,6 +205,57 @@ export default async function PaginaConfiguracoes() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Triagem</CardTitle>
+            <CardDescription>
+              Cada item de licitação recebe um score de 0 a 100 ao ser comparado com um produto do seu
+              catálogo: palavras do nome, palavras-chave e medidas. Os limites abaixo dizem quando o
+              item entra como compatível e quando entra só para você verificar.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FormularioAcao acao={atualizarLimitesDaTriagem} rotulo="Salvar limites" somenteLeitura={!ehDono}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="limite-compativel">Compatível a partir de</Label>
+                  <Input
+                    id="limite-compativel"
+                    name="compativel"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    step={1}
+                    required
+                    defaultValue={org.score_compativel}
+                    disabled={!ehDono}
+                    className="max-w-32"
+                  />
+                  <p className="text-xs text-muted-foreground">Padrão: 60. Medida diferente nunca entra como compatível.</p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="limite-verificar">Verificar a partir de</Label>
+                  <Input
+                    id="limite-verificar"
+                    name="verificar"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    step={1}
+                    required
+                    defaultValue={org.score_verificar}
+                    disabled={!ehDono}
+                    className="max-w-32"
+                  />
+                  <p className="text-xs text-muted-foreground">Padrão: 50. Abaixo disso o item não aparece.</p>
+                </div>
+              </div>
+            </FormularioAcao>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Usuários</CardTitle>
             <CardDescription>Quem tem acesso aos dados da empresa neste app.</CardDescription>
           </CardHeader>
@@ -211,8 +265,7 @@ export default async function PaginaConfiguracoes() {
         </Card>
 
         <p className="text-sm text-muted-foreground">
-          Ainda por vir nesta tela: limites da triagem (etapa 5), e-mail diário e exclusão da conta
-          (etapa 9).
+          Ainda por vir nesta tela: e-mail diário e exclusão da conta (etapa 9).
         </p>
       </div>
     </>

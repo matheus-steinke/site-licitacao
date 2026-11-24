@@ -48,6 +48,48 @@ export async function atualizarSegmentos(
   return { mensagem: "Segmentos de interesse salvos." };
 }
 
+const limites = z
+  .object({
+    compativel: z.coerce.number().int().min(1).max(100),
+    verificar: z.coerce.number().int().min(1).max(100),
+  })
+  .refine((v) => v.verificar <= v.compativel, {
+    message: 'O limite de "verificar" não pode ser maior que o de "compatível".',
+  });
+
+/** Limites do score da triagem (só o responsável). */
+export async function atualizarLimitesDaTriagem(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const valores = {
+    compativel: String(formData.get("compativel") ?? ""),
+    verificar: String(formData.get("verificar") ?? ""),
+  };
+  const dados = limites.safeParse(valores);
+  if (!dados.success) {
+    const mensagem = dados.error.issues[0]?.message ?? "";
+    return {
+      erro: mensagem.includes("verificar") ? mensagem : "Informe números inteiros de 1 a 100.",
+      valores,
+    };
+  }
+  const atual = await obterOrganizacao();
+  if (!atual?.ehDono) return { erro: SEM_PERMISSAO, valores };
+
+  const supabase = await criarClienteServidor();
+  const { error } = await supabase
+    .from("organizacoes")
+    .update({ score_compativel: dados.data.compativel, score_verificar: dados.data.verificar })
+    .eq("id", atual.org.id);
+  if (error) {
+    console.error("[configuracoes] limites da triagem:", error.message);
+    return { erro: FALHA, valores };
+  }
+  refresh();
+  return { mensagem: "Limites salvos. As oportunidades são recalculadas na próxima vez que você abrir a tela." };
+}
+
 async function origem(): Promise<string> {
   if (process.env.NEXT_PUBLIC_SITE_URL) {
     return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
