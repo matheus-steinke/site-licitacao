@@ -44,6 +44,13 @@ export type ConfiguracaoDaRodada = {
    * noite ruim do PNCP a busca gastaria a rodada inteira e nenhum item seria baixado.
    */
   tempoMaximoDaBuscaMs?: number;
+  /**
+   * Retenção: apaga os itens das compras com disputa encerrada há mais de N dias que ninguém
+   * aprovou (0 desliga). O banco recusa menos de 15 dias.
+   */
+  diasDeRetencao: number;
+  /** Máximo de compras limpas pela retenção por rodada. */
+  maximoDeRemocoes: number;
   /** Para testes e simulações: usa só os primeiros N termos. */
   limiteDeTermos?: number;
   agora?: () => Date;
@@ -60,6 +67,8 @@ export const CONFIGURACAO_PADRAO: ConfiguracaoDaRodada = {
   maximoDeCompras: 1500,
   maximoDeVerificacoes: 400,
   tempoMaximoMs: 45 * 60 * 1000,
+  diasDeRetencao: 30,
+  maximoDeRemocoes: 200,
 };
 
 const PAGINAS_POR_TERMO = 10;
@@ -315,8 +324,10 @@ export async function executarRodada(
         !!compra.pncp_atualizado_em &&
         compra.pncp_atualizado_em > conhecida.itens_coletados_em;
       const regraMudou = !!conhecida && conhecida.area_saude !== null && conhecida.classificacao_versao !== versao;
+      // A retenção apagou os itens e a disputa foi remarcada para a frente: baixa de novo.
+      const semItens = !!conhecida?.itens_removidos_em && conhecida.area_saude === true;
       const precisaDosItens =
-        forcarItens || !conhecida || conhecida.area_saude === null || retificada || regraMudou;
+        forcarItens || !conhecida || conhecida.area_saude === null || retificada || regraMudou || semItens;
 
       if (!precisaDosItens) {
         // Fora da saúde e sem novidade: não há o que gravar.
@@ -442,6 +453,27 @@ export async function executarRodada(
     const mensagem = resumirErro(erro instanceof Error ? erro.message : String(erro));
     avisos.unshift(mensagem);
     await repositorio.registrarErro(rodadaId, { etapa: "rodada", mensagem });
+  }
+
+  // Retenção: independe do PNCP e nunca muda o resultado da rodada.
+  if (cfg.diasDeRetencao > 0) {
+    try {
+      const removidos = await repositorio.removerItensAntigos(cfg.diasDeRetencao, cfg.maximoDeRemocoes);
+      if (removidos.compras > 0) {
+        registrar(
+          `retenção: ${removidos.itens} itens apagados de ${removidos.compras} compras ` +
+            `com disputa encerrada há mais de ${cfg.diasDeRetencao} dias`,
+        );
+      }
+    } catch (erro) {
+      const mensagem = resumirErro(erro instanceof Error ? erro.message : String(erro));
+      registrar(`retenção falhou: ${mensagem}`);
+      try {
+        await repositorio.registrarErro(rodadaId, { etapa: "retencao", mensagem });
+      } catch {
+        // O registro do erro é só informativo.
+      }
+    }
   }
 
   totais.mensagem = avisos.length > 0 ? avisos.join(" ") : null;

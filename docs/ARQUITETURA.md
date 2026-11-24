@@ -281,11 +281,27 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 66. **Busca do catálogo sem acento** por uma coluna gerada (`produtos.busca`), com as
     palavras do ID, da referência, do nome e da marca em minúsculas e sem acento. Fecha a
     decisão 23.
-67. **Crescimento do banco (em aberto).** O coletor traz cerca de 200 licitações e 12 mil
-    itens por dia, uns 6 MB. O plano gratuito do Supabase tem 500 MB: no ritmo atual, enche
-    em cerca de dois meses. Falta decidir a regra de retenção (por exemplo, apagar os itens
-    de licitações com disputa encerrada há mais de 90 dias que não foram aprovadas) ou a
-    mudança de plano.
+67. **Retenção dos itens (aprovada em 24/11/2026).** O coletor traz cerca de 200 licitações
+    e 12 mil itens por dia. Quase todo o espaço é dos itens (0,64 KB cada, com índices e
+    segmentos): uns 7,7 MB por dia. O plano gratuito do Supabase tem 500 MB e, sem limpeza,
+    encheria em cerca de dois meses. Regra: ao fim de cada rodada o coletor chama
+    `coletor_remover_itens_antigos`, que apaga os itens das licitações com disputa encerrada há
+    mais de N dias que nenhuma organização aprovou (nem marcou como ganha ou perdida). Ficam a
+    licitação (objeto, datas, situação, arquivos), as oportunidades e as decisões; a página de
+    detalhe avisa que a lista completa está no PNCP. A função só pode ser chamada com a chave
+    de serviço, recusa menos de 15 dias e limpa no máximo 200 licitações por rodada.
+    - **Por que 30 dias, e não os 90 cogitados:** uma licitação fica no banco cerca de 12 dias
+      antes da disputa mais os N dias depois. Com 90 dias seriam (12 + 90) × 7,7 ≈ 785 MB, mais
+      do que o plano inteiro. Com 30 dias, (12 + 30) × 7,7 ≈ 323 MB.
+    - **O que continua crescendo:** o cabeçalho e os arquivos de cada licitação (uns 0,65 MB
+      por dia, 235 MB por ano) nunca são apagados. Com 30 dias de retenção, o plano gratuito
+      deve durar de 6 a 8 meses, em vez de 2. Quando apertar, as saídas são: reduzir os dias
+      (`COLETOR_DIAS_DE_RETENCAO`), apagar também as licitações antigas que não viraram
+      oportunidade de ninguém, ou mudar de plano (decisão do usuário: avaliar o plano pago
+      quando chegar a hora).
+    - **Disputa remarcada:** se uma licitação já limpa reaparece com disputa futura, o coletor
+      baixa os itens de novo e a marca `itens_removidos_em` é apagada.
+    - A limpeza não muda `conteudo_alterado_em`, então não dispara triagem de novo.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

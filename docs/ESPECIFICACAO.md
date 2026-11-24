@@ -60,6 +60,7 @@ Idioma da interface: português do Brasil. Fuso: America/Sao_Paulo. Moeda: R$ (f
 - Grava compra, órgão, UF, município, modalidade, número, objeto, datas, situação e itens. Atualiza situação e datas a cada rodada (adiada, suspensa, revogada).
 - Sem duplicar. Com retentativa, pausa entre chamadas e registro de erros (tabela de log das rodadas).
 - Filtro "área da saúde": manter só compras com pelo menos um item que case com algum segmento.
+- Retenção (aprovada em 24/11/2026, para o banco caber no plano gratuito): os itens das licitações com disputa encerrada há mais de 30 dias que nenhuma organização aprovou são apagados. A licitação (objeto, datas, situação, arquivos), as oportunidades e as decisões ficam; as aprovadas guardam os itens. O prazo é configurável.
 - Opcional, se couber no MVP: baixar o PDF do edital/TR, extrair o texto (pdftotext) e guardar, para os alertas do item 5.
 
 ### 4. Catálogo e tabela de preços (por organização)

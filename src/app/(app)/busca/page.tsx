@@ -138,7 +138,7 @@ function Resultado({
       <dl className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 border-t pt-3 text-sm">
         <div className="flex gap-1.5">
           <dt className="text-muted-foreground">Itens</dt>
-          <dd className="font-medium tabular-nums">{r.totalItens}</dd>
+          <dd className="font-medium tabular-nums">{r.totalItens > 0 ? r.totalItens : "—"}</dd>
         </div>
         <div className="flex gap-1.5">
           <dt className="text-muted-foreground">Valor estimado do edital</dt>

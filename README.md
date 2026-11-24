@@ -249,6 +249,27 @@ Cuidados com o PNCP, que cai com frequência:
 Uma rodada **parcial** (parte das chamadas falhou) não é falha: o que faltou entra na
 próxima. Só termina como **erro** quando não consegue consultar o PNCP de jeito nenhum.
 
+### Retenção: itens antigos são apagados
+
+Quase todo o espaço do banco é ocupado pelos itens das licitações (cerca de 12 mil por dia).
+Para caber no plano gratuito do Supabase (500 MB), ao fim de cada rodada o coletor apaga os
+itens das licitações que atendem às duas condições:
+
+- a disputa terminou há mais de **30 dias**;
+- nenhuma organização aprovou a licitação (nem a marcou como ganha ou perdida).
+
+O que **não** é apagado: a licitação em si (órgão, objeto, datas, situação, arquivos), as
+oportunidades e as decisões de cada cliente, e os itens das licitações aprovadas (o
+Dashboard depende deles). Na página de uma licitação limpa, no lugar da lista de itens
+aparece um aviso com o link do PNCP. Se a disputa for remarcada para a frente, os itens são
+baixados de novo.
+
+Para mudar o prazo, crie a variável `COLETOR_DIAS_DE_RETENCAO` em Settings > Secrets and
+variables > Actions > Variables (por exemplo `20`; mínimo `15`; `0` desliga a limpeza). Com 30
+dias o banco estabiliza perto de 350 MB e depois cresce devagar (uns 20 MB por mês, dos
+cabeçalhos das licitações): o plano gratuito deve durar de 6 a 8 meses. Com 90 dias não
+caberia (cerca de 785 MB). A conta está na decisão 67 de `docs/ARQUITETURA.md`.
+
 ### Configurar o agendamento (uma vez)
 
 No GitHub, em Settings > Secrets and variables > Actions do repositório:
@@ -275,7 +296,7 @@ SUPABASE_URL=https://SEU-PROJETO.supabase.co SUPABASE_SERVICE_ROLE_KEY=... pnpm 
 Opções: `--fonte busca|plano_b`, `--termos N` (só os N primeiros termos) e
 `--simular segmentos.json` (não grava nada; lê os segmentos de um arquivo JSON). Ajustes por
 variável de ambiente: `COLETOR_PAUSA_MS`, `COLETOR_PARALELAS`, `COLETOR_PARALELAS_BUSCA`,
-`COLETOR_MAX_COMPRAS` e `COLETOR_MINUTOS`.
+`COLETOR_MAX_COMPRAS`, `COLETOR_MINUTOS` e `COLETOR_DIAS_DE_RETENCAO`.
 
 ### Quando um segmento é editado
 

@@ -487,6 +487,67 @@ describe("rodada do coletor", () => {
   });
 });
 
+describe("retenção dos itens", () => {
+  const mundo: Mundo = { busca: { trocarte: [daBusca(1)] }, itens: { 1: [{ numeroItem: 1, descricao: "TROCARTE" }] } };
+  // A disputa da compra 1 é em 03/12/2026: 38 dias antes desta data.
+  const bemDepois = new Date("2027-01-10T15:00:00Z");
+  const DEPOIS = { ...CFG, agora: () => bemDepois };
+
+  /** Coleta a compra 1 em 22/11/2026 e adianta o relógio do banco para 10/01/2027. */
+  async function coletarEAdiantar() {
+    let relogio = AGORA;
+    const memoria = criarRepositorioMemoria(SEGMENTOS, () => relogio);
+    await rodar(mundo, memoria);
+    expect(memoria.compras.get(chave(1))?.itens).toHaveLength(1);
+    relogio = bemDepois;
+    return memoria;
+  }
+
+  it("apaga os itens das compras com disputa encerrada há mais tempo que o configurado", async () => {
+    const memoria = await coletarEAdiantar();
+
+    // Com 60 dias de retenção ainda não é hora; desligada (0), nunca apaga.
+    await rodar({ busca: { trocarte: [] } }, memoria, { ...DEPOIS, diasDeRetencao: 60 });
+    await rodar({ busca: { trocarte: [] } }, memoria, { ...DEPOIS, diasDeRetencao: 0 });
+    expect(memoria.compras.get(chave(1))?.itens).toHaveLength(1);
+
+    const { totais } = await rodar({ busca: { trocarte: [] } }, memoria, DEPOIS);
+    const compra = memoria.compras.get(chave(1));
+    expect(compra?.itens).toEqual([]);
+    expect(compra?.itens_removidos_em).toBe(bemDepois.toISOString());
+    // A compra em si continua, classificada como antes.
+    expect(compra?.area_saude).toBe(true);
+    expect(totais.status).toBe("sucesso");
+  });
+
+  it("baixa os itens de novo se a disputa for remarcada para a frente", async () => {
+    const memoria = await coletarEAdiantar();
+    await rodar({ busca: { trocarte: [] } }, memoria, DEPOIS);
+    expect(memoria.compras.get(chave(1))?.itens).toEqual([]);
+
+    // Mesma data de atualização no PNCP: o que pede os itens é a marca da retenção.
+    const { chamadas } = await rodar(
+      { busca: { trocarte: [daBusca(1, { data_fim_vigencia: "2027-01-20T10:00" })] }, itens: mundo.itens },
+      memoria,
+      DEPOIS,
+    );
+    expect(chamadas).toContain("itens:1");
+    const compra = memoria.compras.get(chave(1));
+    expect(compra?.itens).toHaveLength(1);
+    expect(compra?.itens_removidos_em).toBeNull();
+  });
+
+  it("uma falha na retenção não muda o resultado da rodada", async () => {
+    const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+    memoria.repositorio.removerItensAntigos = async () => {
+      throw new Error("statement timeout");
+    };
+    const { totais } = await rodar(mundo, memoria);
+    expect(totais).toMatchObject({ status: "sucesso", erros: 0, compras_novas: 1 });
+    expect(memoria.erros).toEqual([{ etapa: "retencao", mensagem: "statement timeout" }]);
+  });
+});
+
 describe("falhas do banco durante a rodada", () => {
   const itens = Object.fromEntries(
     Array.from({ length: 8 }, (_, i) => [i + 1, [{ numeroItem: 1, descricao: "TROCARTE 5 MM" }]]),

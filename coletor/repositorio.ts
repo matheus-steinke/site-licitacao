@@ -14,7 +14,11 @@ export type CompraConhecida = {
   tentativas_itens: number;
   /** Com qual regra de classificação os itens foram avaliados (null = nunca). */
   classificacao_versao: string | null;
+  /** Os itens foram apagados pela retenção (a disputa tinha passado havia muito tempo). */
+  itens_removidos_em?: string | null;
 };
+
+export type ItensRemovidos = { compras: number; itens: number };
 
 export type CompraParaVerificar = { controle_pncp: string; orgao_cnpj: string; ano: number; sequencial: number };
 
@@ -67,6 +71,11 @@ export interface Repositorio {
   listarParaVerificar(desde: string, antesDe: string, limite: number): Promise<CompraParaVerificar[]>;
   /** Compras com itens pendentes e disputa a partir de `desde`, não conferidas depois de `antesDe`. */
   listarPendentes(desde: string, antesDe: string, limite: number): Promise<CompraParaVerificar[]>;
+  /**
+   * Retenção: apaga os itens das compras com disputa encerrada há mais de `dias` dias que
+   * nenhuma organização aprovou. A compra em si, as oportunidades e as decisões ficam.
+   */
+  removerItensAntigos(dias: number, limite: number): Promise<ItensRemovidos>;
 }
 
 /**
@@ -214,7 +223,9 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
         const { data, error } = await tentarNoBanco(() =>
           supabase
             .from("compras")
-            .select("controle_pncp, area_saude, itens_coletados_em, tentativas_itens, classificacao_versao")
+            .select(
+              "controle_pncp, area_saude, itens_coletados_em, tentativas_itens, classificacao_versao, itens_removidos_em",
+            )
             .in("controle_pncp", lote),
         );
         if (error) falhar("compras conhecidas", error.message);
@@ -245,7 +256,8 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
         const { error: erroVersao } = await tentarNoBanco(() =>
           supabase
             .from("compras")
-            .update({ classificacao_versao: classificacao.versao })
+            // Se a retenção tinha apagado os itens (disputa remarcada), eles voltaram agora.
+            .update({ classificacao_versao: classificacao.versao, itens_removidos_em: null })
             .eq("controle_pncp", compra.controle_pncp),
         );
         if (erroVersao) console.error("não consegui marcar a versão da classificação:", resumirErro(erroVersao.message));
@@ -255,6 +267,14 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
 
     listarParaVerificar: (desde, antesDe, limite) => listarCompras("saude", desde, antesDe, limite),
     listarPendentes: (desde, antesDe, limite) => listarCompras("pendentes", desde, antesDe, limite),
+
+    async removerItensAntigos(dias, limite) {
+      const { data, error } = await tentarNoBanco(() =>
+        supabase.rpc("coletor_remover_itens_antigos", { p_dias: dias, p_limite: limite }),
+      );
+      if (error) falhar("remover itens antigos", error.message);
+      return data as ItensRemovidos;
+    },
   };
 }
 
@@ -271,6 +291,7 @@ export type CompraEmMemoria = {
   tentativas_itens: number;
   verificado_em: string | null;
   classificacao_versao: string | null;
+  itens_removidos_em?: string | null;
 };
 
 export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () => Date = () => new Date()) {
@@ -321,6 +342,7 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
             itens_coletados_em: c.itens_coletados_em,
             tentativas_itens: c.tentativas_itens,
             classificacao_versao: c.classificacao_versao,
+            itens_removidos_em: c.itens_removidos_em ?? null,
           });
         }
       }
@@ -364,6 +386,7 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
         antiga.segmento_ids = classificacao?.segmento_ids ?? [];
         antiga.itens_coletados_em = momento;
         antiga.classificacao_versao = classificacao?.versao ?? null;
+        antiga.itens_removidos_em = null;
       }
       if (arquivos) antiga.arquivos = arquivos;
       if (falhaItens) antiga.tentativas_itens++;
@@ -372,6 +395,19 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
     },
     listarParaVerificar: async (desde, antesDe, limite) => listar(true, desde, antesDe, limite),
     listarPendentes: async (desde, antesDe, limite) => listar(false, desde, antesDe, limite),
+    async removerItensAntigos(dias, limite) {
+      const corte = new Date(agora().getTime() - dias * 24 * 60 * 60 * 1000).toISOString();
+      const resultado = { compras: 0, itens: 0 };
+      for (const c of compras.values()) {
+        if (resultado.compras >= limite) break;
+        if (c.itens.length === 0 || !c.compra.data_disputa || c.compra.data_disputa >= corte) continue;
+        resultado.compras++;
+        resultado.itens += c.itens.length;
+        c.itens = [];
+        c.itens_removidos_em = agora().toISOString();
+      }
+      return resultado;
+    },
   };
 
   return { repositorio, compras, rodadas, erros, alteracoes, fases };

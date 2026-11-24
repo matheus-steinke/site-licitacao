@@ -4,6 +4,8 @@ name: Coletor do PNCP
 # Configuração (uma vez), em Settings > Secrets and variables > Actions:
 #   - Secret   SUPABASE_SERVICE_ROLE_KEY: chave "service_role"/"secret" do Supabase
 #   - Variable SUPABASE_URL: https://SEU-PROJETO.supabase.co
+#   - Variable COLETOR_DIAS_DE_RETENCAO (opcional): depois de quantos dias da disputa os itens das
+#     licitações não aprovadas são apagados. Em branco = 30; 0 = nunca apagar.
 
 on:
   schedule:
@@ -57,6 +59,7 @@ jobs:
           EVENTO: ${{ github.event_name }}
           FONTE: ${{ inputs.fonte }}
           TERMOS: ${{ inputs.termos }}
+          COLETOR_DIAS_DE_RETENCAO: ${{ vars.COLETOR_DIAS_DE_RETENCAO }}
         run: |
           argumentos=()
           if [ "$EVENTO" = "workflow_dispatch" ]; then argumentos+=(--manual); fi

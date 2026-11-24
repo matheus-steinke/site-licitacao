@@ -8,7 +8,7 @@
 //
 // Variáveis de ambiente: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
 // e opcionais COLETOR_PAUSA_MS, COLETOR_PARALELAS, COLETOR_PARALELAS_BUSCA,
-// COLETOR_MAX_COMPRAS, COLETOR_MINUTOS.
+// COLETOR_MAX_COMPRAS, COLETOR_MINUTOS, COLETOR_DIAS_DE_RETENCAO (padrão 30; 0 desliga).
 
 import { readFileSync } from "node:fs";
 
@@ -25,6 +25,13 @@ const temArgumento = (nome: string) => process.argv.includes(`--${nome}`);
 function numero(valor: string | undefined, padrao: number): number {
   const n = Number(valor);
   return valor !== undefined && Number.isFinite(n) && n > 0 ? n : padrao;
+}
+
+/** Dias de retenção dos itens: vazio = padrão, 0 = desligada. */
+export function diasDeRetencao(valor: string | undefined): number {
+  if (valor === undefined || valor.trim() === "") return CONFIGURACAO_PADRAO.diasDeRetencao;
+  const n = Number(valor);
+  return Number.isInteger(n) && n >= 0 ? n : CONFIGURACAO_PADRAO.diasDeRetencao;
 }
 
 /** Detecta os enganos mais comuns ao colar a chave, sem nunca imprimir o valor. */
@@ -63,6 +70,7 @@ async function principal() {
     paralelasNaBusca: numero(process.env.COLETOR_PARALELAS_BUSCA, CONFIGURACAO_PADRAO.paralelasNaBusca),
     maximoDeCompras: numero(process.env.COLETOR_MAX_COMPRAS, CONFIGURACAO_PADRAO.maximoDeCompras),
     tempoMaximoMs: numero(process.env.COLETOR_MINUTOS, 45) * 60 * 1000,
+    diasDeRetencao: diasDeRetencao(process.env.COLETOR_DIAS_DE_RETENCAO),
     limiteDeTermos: argumento("termos") ? numero(argumento("termos"), 5) : undefined,
   };
 

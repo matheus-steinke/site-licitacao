@@ -339,6 +339,7 @@ export type Database = {
           exemplo: boolean
           id: string
           itens_coletados_em: string | null
+          itens_removidos_em: string | null
           link_sistema_origem: string | null
           modalidade_id: number
           modalidade_nome: string
@@ -376,6 +377,7 @@ export type Database = {
           exemplo?: boolean
           id?: string
           itens_coletados_em?: string | null
+          itens_removidos_em?: string | null
           link_sistema_origem?: string | null
           modalidade_id: number
           modalidade_nome: string
@@ -413,6 +415,7 @@ export type Database = {
           exemplo?: boolean
           id?: string
           itens_coletados_em?: string | null
+          itens_removidos_em?: string | null
           link_sistema_origem?: string | null
           modalidade_id?: number
           modalidade_nome?: string
@@ -1091,6 +1094,10 @@ export type Database = {
       }
       coletor_gravar_compra: {
         Args: { p_arquivos?: Json; p_compra: Json; p_itens?: Json }
+        Returns: Json
+      }
+      coletor_remover_itens_antigos: {
+        Args: { p_dias?: number; p_limite?: number }
         Returns: Json
       }
       criar_organizacao: {

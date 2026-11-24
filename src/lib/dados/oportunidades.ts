@@ -252,7 +252,9 @@ async function carregarDetalhe(supabase: Cliente, orgId: string, linha: Linha, o
       .order("sequencial_documento"),
     supabase
       .from("compras")
-      .select("processo, unidade_nome, modo_disputa, srp, data_publicacao, data_abertura_proposta, link_sistema_origem")
+      .select(
+        "processo, unidade_nome, modo_disputa, srp, data_publicacao, data_abertura_proposta, link_sistema_origem, itens_removidos_em",
+      )
       .eq("id", compraId)
       .maybeSingle(),
     // Itens desta licitação que casaram, na coleta, com algum segmento de interesse da empresa.
@@ -359,6 +361,8 @@ async function carregarDetalhe(supabase: Cliente, orgId: string, linha: Linha, o
     /** false: licitação aberta pela Busca que não é oportunidade da organização. */
     ehOportunidade: oportunidadeId !== null,
     compra: compra.data,
+    /** A retenção apagou os itens (disputa encerrada há muito tempo e ninguém aprovou). */
+    itensRemovidos: !!compra.data?.itens_removidos_em && (itens.data ?? []).length === 0,
     compativeis,
     outros,
     outrosDosSegmentos,

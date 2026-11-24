@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { problemaNaChave } from "./index";
+import { diasDeRetencao, problemaNaChave } from "./index";
 
 const jwt = (papel: string) =>
   `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role: papel })).toString("base64url")}.assinatura`;
@@ -20,5 +20,16 @@ describe("conferência da chave do Supabase", () => {
     expect(problemaNaChave("eyJhbGciOiJIUzI1NiJ9.eyJyb2xl")).toContain("cortado");
     expect(problemaNaChave("service_role:eyJhbGciOiJIUzI1NiJ9")).toContain("não começa com");
     expect(problemaNaChave("minha-senha-do-banco")).toContain("não começa com");
+  });
+});
+
+describe("dias de retenção dos itens", () => {
+  it("usa 30 dias quando a variável está vazia ou inválida, e aceita 0 para desligar", () => {
+    expect(diasDeRetencao(undefined)).toBe(30);
+    expect(diasDeRetencao("")).toBe(30);
+    expect(diasDeRetencao("abc")).toBe(30);
+    expect(diasDeRetencao("-5")).toBe(30);
+    expect(diasDeRetencao("45")).toBe(45);
+    expect(diasDeRetencao("0")).toBe(0);
   });
 });

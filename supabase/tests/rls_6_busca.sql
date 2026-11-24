@@ -162,3 +162,51 @@ reset role;
 
 delete from public.oportunidades where id = :'op_sc';
 delete from public.produtos where id = :'produto';
+
+-- ---------------------------------------------------------------------------
+-- Retenção dos itens de licitações antigas
+-- ---------------------------------------------------------------------------
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000c1"}';
+select teste.bloqueia($$select public.coletor_remover_itens_antigos(30)$$, 'cliente não apaga itens antigos');
+reset role;
+
+-- A disputa de SC e a de SP passam a ter acontecido há 40 dias; a de SP foi aprovada pela A.
+update public.compras set data_disputa = now() - interval '40 days' where id in (:'compra_sc', :'compra_sp');
+insert into public.oportunidades (org_id, compra_id, prioridade, status) values (:'org_a', :'compra_sp', 1, 'aprovada');
+insert into public.oportunidades (org_id, compra_id, prioridade, status, motivo_descarte)
+values (:'org_a', :'compra_sc', 1, 'descartada', 'fora da linha') returning id as op_antiga \gset
+select conteudo_alterado_em as marca_sc from public.compras where id = :'compra_sc' \gset
+
+set local role service_role;
+select teste.falha_com($$select public.coletor_remover_itens_antigos(5)$$, 'mínima', 'a retenção não aceita menos de 15 dias');
+select teste.espera(
+  public.coletor_remover_itens_antigos(60) = '{"compras":0,"itens":0}',
+  'com 60 dias de retenção, uma disputa de 40 dias atrás fica como está');
+select teste.espera(
+  public.coletor_remover_itens_antigos(30) = '{"compras":1,"itens":2}',
+  'com 30 dias, apaga os 2 itens da licitação de SC (a de SP foi aprovada e a de RO ainda vai acontecer)');
+select teste.espera(
+  public.coletor_remover_itens_antigos(30) = '{"compras":0,"itens":0}',
+  'rodar de novo não apaga mais nada');
+reset role;
+
+select teste.espera(
+  (select count(*) from public.compra_itens where compra_id = :'compra_sc') = 0
+  and (select itens_removidos_em is not null and area_saude and objeto <> '' from public.compras where id = :'compra_sc'),
+  'a licitação continua, marcada como sem itens');
+select teste.espera(
+  (select count(*) from public.compra_itens where compra_id = :'compra_sp') = 1
+  and (select itens_removidos_em is null from public.compras where id = :'compra_sp'),
+  'a licitação aprovada guarda os itens');
+select teste.espera(
+  (select count(*) from public.compra_itens where compra_id = :'compra_ro') = 1,
+  'licitação com disputa futura não é tocada');
+select teste.espera(
+  (select status = 'descartada' and motivo_descarte = 'fora da linha' from public.oportunidades where id = :'op_antiga'),
+  'a oportunidade e a decisão do cliente continuam');
+select teste.espera(
+  (select conteudo_alterado_em = :'marca_sc' from public.compras where id = :'compra_sc'),
+  'apagar itens antigos não marca a licitação para nova triagem');
+
+delete from public.oportunidades where org_id = :'org_a';
