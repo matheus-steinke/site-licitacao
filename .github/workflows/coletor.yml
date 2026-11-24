@@ -1,6 +1,6 @@
 name: Coletor do PNCP
 
-# Busca licitações da área da saúde no PNCP e grava no Supabase.
+# Busca licitações da área da saúde no PNCP, grava no Supabase e faz a triagem por organização.
 # Configuração (uma vez), em Settings > Secrets and variables > Actions:
 #   - Secret   SUPABASE_SERVICE_ROLE_KEY: chave "service_role"/"secret" do Supabase
 #   - Variable SUPABASE_URL: https://SEU-PROJETO.supabase.co
@@ -58,3 +58,13 @@ jobs:
           case "$FONTE" in busca|plano_b) argumentos+=(--fonte "$FONTE");; esac
           if [[ "$TERMOS" =~ ^[0-9]+$ ]]; then argumentos+=(--termos "$TERMOS"); fi
           pnpm coletor "${argumentos[@]}"
+
+      # Compara as licitações novas ou alteradas com o catálogo de cada organização.
+      # Roda mesmo se a coleta terminou com erro: pode haver triagem pendente de antes.
+      - name: Triagem por organização
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm triagem

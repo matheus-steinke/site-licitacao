@@ -296,6 +296,7 @@ export type Database = {
           atualizado_em: string
           codigo_ibge: string | null
           coletado_em: string
+          conteudo_alterado_em: string
           controle_pncp: string
           data_abertura_proposta: string | null
           data_disputa: string | null
@@ -332,6 +333,7 @@ export type Database = {
           atualizado_em?: string
           codigo_ibge?: string | null
           coletado_em?: string
+          conteudo_alterado_em?: string
           controle_pncp: string
           data_abertura_proposta?: string | null
           data_disputa?: string | null
@@ -368,6 +370,7 @@ export type Database = {
           atualizado_em?: string
           codigo_ibge?: string | null
           coletado_em?: string
+          conteudo_alterado_em?: string
           controle_pncp?: string
           data_abertura_proposta?: string | null
           data_disputa?: string | null
@@ -536,6 +539,149 @@ export type Database = {
           },
         ]
       }
+      oportunidade_itens: {
+        Row: {
+          alertas: string[]
+          detalhe: Json
+          item_id: string
+          lote: string | null
+          nivel: string
+          oportunidade_id: string
+          org_id: string
+          produto_id: string
+          score: number
+        }
+        Insert: {
+          alertas?: string[]
+          detalhe?: Json
+          item_id: string
+          lote?: string | null
+          nivel: string
+          oportunidade_id: string
+          org_id: string
+          produto_id: string
+          score: number
+        }
+        Update: {
+          alertas?: string[]
+          detalhe?: Json
+          item_id?: string
+          lote?: string | null
+          nivel?: string
+          oportunidade_id?: string
+          org_id?: string
+          produto_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oportunidade_itens_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "compra_itens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oportunidade_itens_oportunidade_id_org_id_fkey"
+            columns: ["oportunidade_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "oportunidades"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "oportunidade_itens_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oportunidade_itens_produto_id_org_id_fkey"
+            columns: ["produto_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      oportunidades: {
+        Row: {
+          alertas: Json
+          atualizado_em: string
+          compra_id: string
+          criado_em: string
+          decidido_em: string | null
+          decidido_por: string | null
+          id: string
+          itens_a_verificar: number
+          itens_compativeis: number
+          itens_do_segmento: number
+          motivo_descarte: string | null
+          org_id: string
+          prioridade: number
+          score: number
+          segmento_ids: string[]
+          status: Database["public"]["Enums"]["status_oportunidade"]
+          triada_em: string
+          valor_estimado: number
+        }
+        Insert: {
+          alertas?: Json
+          atualizado_em?: string
+          compra_id: string
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por?: string | null
+          id?: string
+          itens_a_verificar?: number
+          itens_compativeis?: number
+          itens_do_segmento?: number
+          motivo_descarte?: string | null
+          org_id: string
+          prioridade: number
+          score?: number
+          segmento_ids?: string[]
+          status?: Database["public"]["Enums"]["status_oportunidade"]
+          triada_em?: string
+          valor_estimado?: number
+        }
+        Update: {
+          alertas?: Json
+          atualizado_em?: string
+          compra_id?: string
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por?: string | null
+          id?: string
+          itens_a_verificar?: number
+          itens_compativeis?: number
+          itens_do_segmento?: number
+          motivo_descarte?: string | null
+          org_id?: string
+          prioridade?: number
+          score?: number
+          segmento_ids?: string[]
+          status?: Database["public"]["Enums"]["status_oportunidade"]
+          triada_em?: string
+          valor_estimado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oportunidades_compra_id_fkey"
+            columns: ["compra_id"]
+            isOneToOne: false
+            referencedRelation: "compras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oportunidades_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizacao_exclusoes: {
         Row: {
           criado_em: string
@@ -608,6 +754,13 @@ export type Database = {
           plano: string
           porte: Database["public"]["Enums"]["porte_empresa"]
           razao_social: string
+          score_compativel: number
+          score_verificar: number
+          triada_em: string | null
+          triagem_config_em: string
+          triagem_feita_config_em: string | null
+          triagem_marca: string | null
+          triagem_motor: number | null
           ufs: string[]
         }
         Insert: {
@@ -619,6 +772,13 @@ export type Database = {
           plano?: string
           porte: Database["public"]["Enums"]["porte_empresa"]
           razao_social: string
+          score_compativel?: number
+          score_verificar?: number
+          triada_em?: string | null
+          triagem_config_em?: string
+          triagem_feita_config_em?: string | null
+          triagem_marca?: string | null
+          triagem_motor?: number | null
           ufs?: string[]
         }
         Update: {
@@ -630,6 +790,13 @@ export type Database = {
           plano?: string
           porte?: Database["public"]["Enums"]["porte_empresa"]
           razao_social?: string
+          score_compativel?: number
+          score_verificar?: number
+          triada_em?: string | null
+          triagem_config_em?: string
+          triagem_feita_config_em?: string | null
+          triagem_marca?: string | null
+          triagem_motor?: number | null
           ufs?: string[]
         }
         Relationships: []
@@ -825,7 +992,42 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      oportunidades_lista: {
+        Row: {
+          alertas: Json | null
+          ano: number | null
+          compra_id: string | null
+          controle_pncp: string | null
+          criado_em: string | null
+          data_disputa: string | null
+          decidido_em: string | null
+          exemplo: boolean | null
+          id: string | null
+          itens_a_verificar: number | null
+          itens_compativeis: number | null
+          itens_do_segmento: number | null
+          modalidade_nome: string | null
+          motivo_descarte: string | null
+          municipio: string | null
+          numero_compra: string | null
+          objeto: string | null
+          org_id: string | null
+          orgao_cnpj: string | null
+          orgao_nome: string | null
+          prioridade: number | null
+          score: number | null
+          segmento_ids: string[] | null
+          sequencial: number | null
+          situacao_id: number | null
+          status: Database["public"]["Enums"]["status_oportunidade"] | null
+          total_itens: number | null
+          triada_em: string | null
+          uf: string | null
+          valor_estimado: number | null
+          valor_total_estimado: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       aceitar_convite: { Args: { p_convite: string }; Returns: string }
@@ -841,6 +1043,14 @@ export type Database = {
         }
         Returns: string
       }
+      decidir_oportunidade: {
+        Args: {
+          p_motivo?: string
+          p_oportunidade: string
+          p_status: Database["public"]["Enums"]["status_oportunidade"]
+        }
+        Returns: Database["public"]["Enums"]["status_oportunidade"]
+      }
       definir_segmentos_organizacao: {
         Args: { p_org: string; p_segmentos: string[] }
         Returns: undefined
@@ -852,6 +1062,28 @@ export type Database = {
           p_modo: string
           p_org: string
         }
+        Returns: Json
+      }
+      triagem_gravar: {
+        Args: {
+          p_config_em: string
+          p_marca_ate: string
+          p_org: string
+          p_resultados: Json
+        }
+        Returns: Json
+      }
+      triagem_lote: {
+        Args: {
+          p_max_compras?: number
+          p_max_itens?: number
+          p_motor: number
+          p_org: string
+        }
+        Returns: Json
+      }
+      triagem_situacao: {
+        Args: { p_motor: number; p_org: string }
         Returns: Json
       }
       meus_convites: {
@@ -866,6 +1098,7 @@ export type Database = {
     Enums: {
       papel_membro: "dono" | "membro"
       porte_empresa: "me_epp" | "demais"
+      status_oportunidade: "nova" | "aprovada" | "descartada" | "ganha" | "perdida"
     }
     CompositeTypes: {
       [_ in never]: never
