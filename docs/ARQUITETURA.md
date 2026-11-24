@@ -242,6 +242,9 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 55. **Calibração com dados reais antes de publicar:** uma organização temporária com cópia
     do catálogo e todos os estados, os 117 mil itens baixados para um arquivo local e o
     motor rodado sobre eles a cada ajuste. A organização temporária foi apagada no fim.
+56. **Sigla "rtu" removida da Urologia.** Na primeira triagem real, uma licitação de
+    eletrônica apareceu como Urologia porque um item citava "Modbus RTU". Siglas curtas que
+    têm outro sentido fora da saúde não devem ser sinônimo de segmento.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

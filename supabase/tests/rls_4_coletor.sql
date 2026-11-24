@@ -130,6 +130,9 @@ select teste.espera(
 select teste.espera(
   (select sinonimos @> array['duplo jota', 'pigtail', 'holmium'] from public.segmentos where slug = 'urologia'),
   'sinônimos específicos continuam');
+select teste.espera(
+  (select not ('rtu' = any (sinonimos)) from public.segmentos where slug = 'urologia'),
+  'a sigla "rtu" saiu da urologia (casava com "Modbus RTU")');
 
 -- Vocabulário acrescentado depois da primeira rodada real.
 select teste.espera(
