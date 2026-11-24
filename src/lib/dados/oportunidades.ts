@@ -1,8 +1,10 @@
 import "server-only";
 
 import { linkDoPncp } from "@/lib/dados/compras";
+import { listarSegmentosAtivos, listarSegmentosDaOrganizacao } from "@/lib/organizacao";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/tipos";
+import { contemTermo, prepararTermos, prepararTexto } from "@/lib/texto/normalizar";
 import { lerAlertas } from "@/lib/triagem/alertas";
 import type { AlertaDeItem, DetalheDoCasamento, Nivel } from "@/lib/triagem/motor";
 
@@ -14,6 +16,8 @@ export type AbaDeOportunidades = (typeof ABAS)[number];
 export const LIMITE_DA_LISTA = 200;
 /** Quantos itens sem casamento a página de detalhe mostra. */
 export const LIMITE_DE_OUTROS_ITENS = 300;
+/** Quantos itens dos segmentos da empresa a página de detalhe carrega (em geral são poucos). */
+const LIMITE_DE_ITENS_DE_SEGMENTO = 2000;
 
 export type OportunidadeResumo = Awaited<ReturnType<typeof listarOportunidades>>["oportunidades"][number];
 
@@ -112,6 +116,8 @@ export type ItemCompativel = {
   detalhe: Partial<DetalheDoCasamento>;
   alertas: AlertaDeItem[];
   lote: string | null;
+  /** Segmentos de interesse da empresa com que o item casa. */
+  segmentoIds: string[];
   produto: { id: string; codigo: string; referencia: string; nome: string; precoProposta: number; lanceMinimo: number };
 };
 
@@ -122,7 +128,12 @@ export type OutroItem = {
   quantidade: number | null;
   unidade: string | null;
   valorReferencia: number | null;
+  /** Segmentos de interesse da empresa com que o item casa. */
+  segmentoIds: string[];
 };
+
+/** Um segmento de interesse da empresa, com a posição que define a cor dele na tela. */
+export type SegmentoDaEmpresa = { id: string; nome: string; posicao: number; itens: number };
 
 /** Uma oportunidade com tudo o que a página de detalhe mostra (ou null se não existe para a organização). */
 export async function obterOportunidade(orgId: string, id: string) {
@@ -136,7 +147,8 @@ export async function obterOportunidade(orgId: string, id: string) {
   if (error) throw new Error(`Falha ao carregar a oportunidade: ${error.message}`);
   if (!linha?.compra_id) return null;
 
-  const [casados, itens, arquivos, compra] = await Promise.all([
+  const idsDaEmpresa = await listarSegmentosDaOrganizacao(orgId);
+  const [casados, itens, arquivos, compra, doSegmento, exclusoes, segmentosAtivos] = await Promise.all([
     supabase
       .from("oportunidade_itens")
       .select(
@@ -161,9 +173,61 @@ export async function obterOportunidade(orgId: string, id: string) {
       .select("processo, unidade_nome, modo_disputa, srp, data_publicacao, data_abertura_proposta, link_sistema_origem")
       .eq("id", linha.compra_id)
       .maybeSingle(),
+    // Itens desta licitação que casaram, na coleta, com algum segmento de interesse da empresa.
+    idsDaEmpresa.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : supabase
+          .from("compra_item_segmentos")
+          .select(
+            `segmento_id,
+             item:compra_itens!inner (id, compra_id, numero_item, descricao, quantidade, unidade, valor_unitario_estimado)`,
+          )
+          .eq("item.compra_id", linha.compra_id)
+          .in("segmento_id", idsDaEmpresa)
+          .limit(LIMITE_DE_ITENS_DE_SEGMENTO),
+    supabase.from("organizacao_exclusoes").select("termo").eq("org_id", orgId),
+    listarSegmentosAtivos(),
   ]);
-  const falha = casados.error ?? itens.error ?? arquivos.error ?? compra.error;
+  const falha = casados.error ?? itens.error ?? arquivos.error ?? compra.error ?? doSegmento.error ?? exclusoes.error;
   if (falha) throw new Error(`Falha ao carregar os itens da oportunidade: ${falha.message}`);
+
+  // Segmentos por item. O que a empresa excluiu não conta, como na triagem.
+  const termosExcluidos = prepararTermos((exclusoes.data ?? []).map((e) => e.termo));
+  const segmentosDoItem = new Map<string, string[]>();
+  const itensDeSegmento = new Map<string, OutroItem>();
+  for (const linhaDoSegmento of doSegmento.data ?? []) {
+    const item = linhaDoSegmento.item;
+    if (!item) continue;
+    if (!segmentosDoItem.has(item.id)) {
+      const texto = prepararTexto(item.descricao);
+      if (termosExcluidos.some((termo) => contemTermo(texto, termo, { proximas: false }))) continue;
+      segmentosDoItem.set(item.id, []);
+      itensDeSegmento.set(item.id, {
+        id: item.id,
+        numero: item.numero_item,
+        descricao: item.descricao,
+        quantidade: item.quantidade,
+        unidade: item.unidade,
+        valorReferencia: item.valor_unitario_estimado,
+        segmentoIds: [],
+      });
+    }
+    segmentosDoItem.get(item.id)?.push(linhaDoSegmento.segmento_id);
+  }
+  // A ordem dos segmentos (e a cor de cada um) é a da lista de segmentos, não a da licitação.
+  const ordem = new Map(segmentosAtivos.map((s, indice) => [s.id, indice]));
+  const daEmpresa = idsDaEmpresa
+    .filter((idDoSegmento) => ordem.has(idDoSegmento))
+    .sort((a, b) => (ordem.get(a) ?? 0) - (ordem.get(b) ?? 0));
+  for (const lista of segmentosDoItem.values()) lista.sort((a, b) => daEmpresa.indexOf(a) - daEmpresa.indexOf(b));
+  for (const item of itensDeSegmento.values()) item.segmentoIds = segmentosDoItem.get(item.id) ?? [];
+  const nomes = new Map(segmentosAtivos.map((s) => [s.id, s.nome]));
+  const segmentosDaEmpresa: SegmentoDaEmpresa[] = daEmpresa.map((idDoSegmento, posicao) => ({
+    id: idDoSegmento,
+    nome: nomes.get(idDoSegmento) ?? "Segmento",
+    posicao,
+    itens: [...segmentosDoItem.values()].filter((lista) => lista.includes(idDoSegmento)).length,
+  }));
 
   const compativeis: ItemCompativel[] = (casados.data ?? [])
     .flatMap((c) => {
@@ -181,6 +245,7 @@ export async function obterOportunidade(orgId: string, id: string) {
           detalhe: (c.detalhe ?? {}) as Partial<DetalheDoCasamento>,
           alertas: c.alertas as AlertaDeItem[],
           lote: c.lote,
+          segmentoIds: segmentosDoItem.get(c.item.id) ?? [],
           produto: {
             id: c.produto.id,
             codigo: c.produto.codigo,
@@ -205,7 +270,13 @@ export async function obterOportunidade(orgId: string, id: string) {
       quantidade: item.quantidade,
       unidade: item.unidade,
       valorReferencia: item.valor_unitario_estimado,
+      segmentoIds: segmentosDoItem.get(item.id) ?? [],
     }));
+  // Todos os itens dos segmentos da empresa que não casaram com o catálogo, mesmo os que
+  // ficam além do limite da lista geral (licitações com milhares de itens).
+  const outrosDosSegmentos = [...itensDeSegmento.values()]
+    .filter((item) => !casou.has(item.id))
+    .sort((a, b) => a.numero - b.numero);
 
   const resumo = resumir(linha as Linha, Date.now());
   return {
@@ -213,6 +284,8 @@ export async function obterOportunidade(orgId: string, id: string) {
     compra: compra.data,
     compativeis,
     outros,
+    outrosDosSegmentos,
+    segmentosDaEmpresa,
     totalDeOutros: Math.max(0, resumo.totalItens - compativeis.length),
     arquivos: arquivos.data ?? [],
   };

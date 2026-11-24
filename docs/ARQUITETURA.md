@@ -245,6 +245,11 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 56. **Sigla "rtu" removida da Urologia.** Na primeira triagem real, uma licitação de
     eletrônica apareceu como Urologia porque um item citava "Modbus RTU". Siglas curtas que
     têm outro sentido fora da saúde não devem ser sinônimo de segmento.
+57. **Itens dos segmentos pintados no detalhe** (pedido do dono do projeto em 24/11/2026,
+    incluído na especificação). Uma cor por segmento de interesse da empresa, pela ordem dos
+    segmentos; a etiqueta com o nome acompanha a cor, para não depender só dela. Os itens
+    dos segmentos são carregados à parte, sem o limite de 300 da lista geral, e o filtro
+    "Só dos meus segmentos" troca na própria tela, sem recarregar.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

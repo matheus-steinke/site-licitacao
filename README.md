@@ -376,6 +376,14 @@ laboratório, fio guia de intubação). O que resolve, na ordem:
 2. **Palavras-chave no produto:** para o que o edital chama por outro nome.
 3. **Limites do score:** suba o de "verificar" para ver menos, desça para ver mais.
 
+### Itens dos seus segmentos, pintados
+
+Na página de detalhe, os itens que pertencem aos segmentos de interesse da empresa aparecem
+pintados, com **uma cor por segmento**, uma faixa na borda e uma etiqueta com o nome do
+segmento. Uma legenda mostra quantos itens há de cada um, e o botão "Só dos meus segmentos"
+esconde o resto. Itens que a empresa excluiu (Catálogo > Exclusões) não são pintados. As
+cores ficam em [`src/lib/segmentos-cores.ts`](src/lib/segmentos-cores.ts).
+
 ### Situações de uma oportunidade
 
 Nova → Aprovada (agendada) ou Descartada (com motivo). Depois da data da disputa, a aprovada

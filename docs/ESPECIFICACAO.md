@@ -98,6 +98,7 @@ Para cada licitação nova nas UFs do cliente, comparar CADA item com o catálog
 - Status por organização: Nova → Aprovada (agendada) / Descartada; depois da data: Disputada; opcional Ganha/Perdida.
 - Ações: Aprovar, Descartar (com motivo), abrir o detalhe.
 - Página de detalhe: dados do edital, tabela de itens compatíveis e não compatíveis, alertas, link do PNCP e lista de arquivos com download.
+  - Na página de detalhe, os itens dos segmentos de interesse da empresa ficam destacados ("pintados"), com uma cor por segmento, para o distribuidor identificar rápido quais itens são de cada segmento. (Pedido em 24/11/2026.)
 
 ### 8. Dashboard (botão "Dashboard" no menu)
 - Cartões:

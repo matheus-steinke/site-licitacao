@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { z } from "zod";
 
 import { AcoesDaOportunidade } from "@/components/oportunidades/acoes";
+import { AlternarItens } from "@/components/oportunidades/alternar-itens";
 import { ChipDeAlerta, ChipsDeAlerta } from "@/components/oportunidades/alertas";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,11 +16,15 @@ import {
   LIMITE_DE_OUTROS_ITENS,
   obterOportunidade,
   type ItemCompativel,
+  type OutroItem,
+  type SegmentoDaEmpresa,
   type StatusOportunidade,
 } from "@/lib/dados/oportunidades";
 import { formatarData, formatarDataHora, formatarDiaSemana, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { exigirOrganizacao } from "@/lib/organizacao";
+import { corDoSegmento } from "@/lib/segmentos-cores";
 import { ROTULO_DO_ALERTA_DE_ITEM } from "@/lib/triagem/alertas";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Oportunidade" };
 
@@ -36,6 +41,84 @@ function Dado({ rotulo, children }: { rotulo: string; children: React.ReactNode 
     <div>
       <dt className="text-xs text-muted-foreground">{rotulo}</dt>
       <dd className="text-sm font-medium">{children}</dd>
+    </div>
+  );
+}
+
+/** Etiqueta colorida com o nome do segmento (a cor nunca é a única pista: o nome vai junto). */
+function EtiquetaDeSegmento({ segmento, quantidade }: { segmento: SegmentoDaEmpresa; quantidade?: number }) {
+  const cor = corDoSegmento(segmento.posicao);
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium", cor.etiqueta)}>
+      <span className={cn("size-2 shrink-0 rounded-full", cor.ponto)} aria-hidden />
+      {segmento.nome}
+      {quantidade === undefined ? null : <span className="tabular-nums opacity-80">· {quantidade}</span>}
+    </span>
+  );
+}
+
+/** As etiquetas dos segmentos de um item, logo abaixo da descrição. */
+function SegmentosDoItem({ ids, segmentos }: { ids: string[]; segmentos: Map<string, SegmentoDaEmpresa> }) {
+  if (ids.length === 0) return null;
+  return (
+    <span className="mt-1.5 flex flex-wrap gap-1">
+      {ids.flatMap((id) => {
+        const segmento = segmentos.get(id);
+        return segmento ? [<EtiquetaDeSegmento key={id} segmento={segmento} />] : [];
+      })}
+    </span>
+  );
+}
+
+/** Itens do edital que não casaram com o catálogo; os dos segmentos da empresa vêm pintados. */
+function TabelaDeItens({
+  itens,
+  segmentos,
+  identificacao,
+}: {
+  itens: OutroItem[];
+  segmentos: Map<string, SegmentoDaEmpresa>;
+  identificacao: string;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-xl border">
+      <Table data-testid={identificacao}>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-14">Item</TableHead>
+            <TableHead>Descrição no edital</TableHead>
+            <TableHead className="text-right">Qtd.</TableHead>
+            <TableHead className="text-right">Valor de referência</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {itens.map((item) => {
+            const primeiro = item.segmentoIds.map((id) => segmentos.get(id)).find(Boolean);
+            const cor = primeiro ? corDoSegmento(primeiro.posicao) : null;
+            return (
+              <TableRow
+                key={item.id}
+                className={cn("align-top", cor?.linha)}
+                data-segmento={item.segmentoIds.length > 0 ? "sim" : undefined}
+              >
+                <TableCell className={cn("tabular-nums", cor?.faixa)}>{item.numero}</TableCell>
+                <TableCell className="whitespace-normal">
+                  <p className="line-clamp-3 text-sm" title={item.descricao}>
+                    {item.descricao}
+                  </p>
+                  <SegmentosDoItem ids={item.segmentoIds} segmentos={segmentos} />
+                </TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">
+                  {formatarNumero(item.quantidade)} {item.unidade ?? ""}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {item.valorReferencia ? formatarMoeda(item.valorReferencia) : "não informado"}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -106,6 +189,14 @@ async function Detalhe({ params }: { params: Promise<{ id: string }> }) {
   if (!id.success) notFound();
   const op = await obterOportunidade(org.id, id.data);
   if (!op) notFound();
+
+  // Segmentos de interesse da empresa: cada um com a sua cor.
+  const segmentos = new Map(op.segmentosDaEmpresa.map((segmento) => [segmento.id, segmento]));
+  const comItens = op.segmentosDaEmpresa.filter((segmento) => segmento.itens > 0);
+  const corDaLinha = (ids: string[]) => {
+    const primeiro = ids.map((idDoSegmento) => segmentos.get(idDoSegmento)).find(Boolean);
+    return primeiro ? corDoSegmento(primeiro.posicao) : null;
+  };
 
   const disputada = op.status === "aprovada" && op.encerrada;
   const compativeis = op.compativeis.filter((item) => item.nivel === "compativel");
@@ -243,12 +334,15 @@ async function Detalhe({ params }: { params: Promise<{ id: string }> }) {
                 </TableHeader>
                 <TableBody>
                   {op.compativeis.map((item) => (
-                    <TableRow key={item.itemId} className="align-top">
-                      <TableCell className="tabular-nums">{item.numero}</TableCell>
+                    <TableRow key={item.itemId} className={cn("align-top", corDaLinha(item.segmentoIds)?.linha)}>
+                      <TableCell className={cn("tabular-nums", corDaLinha(item.segmentoIds)?.faixa)}>
+                        {item.numero}
+                      </TableCell>
                       <TableCell className="max-w-72 whitespace-normal">
                         <p className="line-clamp-4 text-sm" title={item.descricao}>
                           {item.descricao}
                         </p>
+                        <SegmentosDoItem ids={item.segmentoIds} segmentos={segmentos} />
                       </TableCell>
                       <TableCell className="text-right tabular-nums whitespace-nowrap">
                         {formatarNumero(item.quantidade)} {item.unidade ?? ""}
@@ -282,45 +376,51 @@ async function Detalhe({ params }: { params: Promise<{ id: string }> }) {
         <h2 id="titulo-outros" className="mb-3 font-medium">
           Outros itens do edital ({op.totalDeOutros})
         </h2>
+
+        {comItens.length > 0 ? (
+          <div className="mb-3 rounded-xl border p-3" data-testid="legenda-de-segmentos">
+            <p className="text-sm">
+              <span className="font-medium">Seus segmentos nesta licitação:</span>{" "}
+              <span className="text-muted-foreground">os itens de cada um aparecem pintados com a cor dele.</span>
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {comItens.map((segmento) => (
+                <EtiquetaDeSegmento key={segmento.id} segmento={segmento} quantidade={segmento.itens} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {op.outros.length === 0 ? (
           <p className="text-sm text-muted-foreground">Todos os itens do edital casaram com o seu catálogo.</p>
+        ) : op.outrosDosSegmentos.length > 0 ? (
+          <AlternarItens
+            quantidadeDosSegmentos={op.outrosDosSegmentos.length}
+            todos={
+              <>
+                <TabelaDeItens itens={op.outros} segmentos={segmentos} identificacao="outros-itens" />
+                {op.totalDeOutros > op.outros.length ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Mostrando os {LIMITE_DE_OUTROS_ITENS} primeiros de {op.totalDeOutros}. Em “Só dos meus
+                    segmentos” aparecem todos os itens dos seus segmentos; a lista completa está no PNCP.
+                  </p>
+                ) : null}
+              </>
+            }
+            dosSegmentos={
+              <TabelaDeItens itens={op.outrosDosSegmentos} segmentos={segmentos} identificacao="itens-dos-segmentos" />
+            }
+          />
         ) : (
-          <div className="overflow-x-auto rounded-xl border">
-            <Table data-testid="outros-itens">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-14">Item</TableHead>
-                  <TableHead>Descrição no edital</TableHead>
-                  <TableHead className="text-right">Qtd.</TableHead>
-                  <TableHead className="text-right">Valor de referência</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {op.outros.map((item) => (
-                  <TableRow key={item.id} className="align-top">
-                    <TableCell className="tabular-nums">{item.numero}</TableCell>
-                    <TableCell className="whitespace-normal">
-                      <p className="line-clamp-3 text-sm" title={item.descricao}>
-                        {item.descricao}
-                      </p>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums whitespace-nowrap">
-                      {formatarNumero(item.quantidade)} {item.unidade ?? ""}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {item.valorReferencia ? formatarMoeda(item.valorReferencia) : "não informado"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <>
+            <TabelaDeItens itens={op.outros} segmentos={segmentos} identificacao="outros-itens" />
+            {op.totalDeOutros > op.outros.length ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Mostrando os {LIMITE_DE_OUTROS_ITENS} primeiros de {op.totalDeOutros}. A lista completa está no PNCP.
+              </p>
+            ) : null}
+          </>
         )}
-        {op.totalDeOutros > op.outros.length ? (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Mostrando os {LIMITE_DE_OUTROS_ITENS} primeiros de {op.totalDeOutros}. A lista completa está no PNCP.
-          </p>
-        ) : null}
       </section>
 
       <section aria-labelledby="titulo-arquivos">
