@@ -60,7 +60,9 @@ export function normalizarParaMedidas(texto: string): string {
     .toLowerCase()
     .replace(/[“”″]/g, '"')
     .replace(/(\d),(\d)/g, "$1.$2")
-    .replace(/(?<![\d.])\.(\d)/g, "0.$1");
+    .replace(/(?<![\d.])\.(\d)/g, "0.$1")
+    // "1.000 ml" é mil mililitros, não um: ponto de milhar antes de ml ou micrômetro.
+    .replace(/(?<![\d.])([1-9]\d{0,2})\.(\d{3})(?=\s?(?:ml|mililitros?|um|micras?)(?![a-z0-9]))/g, "$1$2");
 }
 
 export function extrairMedidas(textoOriginal: string): MedidasExtraidas {

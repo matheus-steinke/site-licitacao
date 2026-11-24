@@ -11,7 +11,7 @@ import {
   type TextoPreparado,
 } from "../texto/normalizar";
 import { compararMedidas, extrairMedidas, normalizarParaMedidas, type MedidasExtraidas } from "./medidas";
-import { marcasDoCatalogo, prepararProduto, type ProdutoBruto, type ProdutoPreparado } from "./produto";
+import { FRACAS, marcasDoCatalogo, prepararProduto, type ProdutoBruto, type ProdutoPreparado } from "./produto";
 
 /**
  * Mude este número sempre que a regra da triagem mudar: as organizações são triadas de
@@ -19,7 +19,7 @@ import { marcasDoCatalogo, prepararProduto, type ProdutoBruto, type ProdutoPrepa
  */
 export const VERSAO_DA_TRIAGEM = 1;
 
-export const LIMITES_PADRAO = { compativel: 60, verificar: 40 };
+export const LIMITES_PADRAO = { compativel: 60, verificar: 50 };
 
 export type ConfiguracaoDaTriagem = {
   porte: "me_epp" | "demais";
@@ -108,23 +108,25 @@ export type TriagemPreparada = {
   segmentoIds: Set<string>;
   exclusoes: Termo[];
   produtos: ProdutoPreparado[];
-  /** Palavra -> produtos que podem casar com um item que a contenha. */
+  /** Palavra do nome -> produtos que a têm no nome. */
   porPalavra: Map<string, ProdutoPreparado[]>;
+  /** Primeira palavra de cada palavra-chave -> produtos. */
+  porChave: Map<string, ProdutoPreparado[]>;
 };
 
 export function prepararTriagem(configuracao: ConfiguracaoDaTriagem): TriagemPreparada {
   const marcas = marcasDoCatalogo(configuracao.produtos);
   const produtos = configuracao.produtos.map((produto) => prepararProduto(produto, marcas));
   const porPalavra = new Map<string, ProdutoPreparado[]>();
-  const indexar = (palavra: string | null | undefined, produto: ProdutoPreparado) => {
-    if (!palavra) return;
-    const lista = porPalavra.get(palavra);
-    if (!lista) porPalavra.set(palavra, [produto]);
+  const porChave = new Map<string, ProdutoPreparado[]>();
+  const indexar = (indice: Map<string, ProdutoPreparado[]>, palavra: string, produto: ProdutoPreparado) => {
+    const lista = indice.get(palavra);
+    if (!lista) indice.set(palavra, [produto]);
     else if (!lista.includes(produto)) lista.push(produto);
   };
   for (const produto of produtos) {
-    indexar(produto.cabeca, produto);
-    for (const termo of produto.palavrasChave) indexar(termo.palavras[0], produto);
+    for (const { palavra } of produto.nucleo) indexar(porPalavra, palavra, produto);
+    for (const termo of produto.palavrasChave) indexar(porChave, termo.palavras[0], produto);
   }
   return {
     configuracao: {
@@ -136,7 +138,40 @@ export function prepararTriagem(configuracao: ConfiguracaoDaTriagem): TriagemPre
     exclusoes: prepararTermos(configuracao.exclusoes),
     produtos,
     porPalavra,
+    porChave,
   };
+}
+
+/**
+ * Palavras que não dizem o que o item é: o que costuma vir antes do nome ("Código GHC: 123
+ * Especificação: CATETER...", "ITEM EXCLUSIVO PARA ME/EPP - SONDA...", "LOTE 1 - KIT ...") e os
+ * rótulos do catálogo federal ("Fio Guia aplicação: vascular, material: nitinol").
+ */
+const SEM_SIGNIFICADO = new Set(
+  [
+    "codigo", "cod", "ghc", "especificacao", "descricao", "item", "exclusivo", "mei", "me", "epp", "lote",
+    "grupo", "cota", "reservada", "principal", "ampla", "disputa", "catmat", "br", "unidade", "un", "und",
+    "idem", "aplicacao", "modelo", "identificacao", "tamanho", "numero", "materia", "prima", "caracteristica",
+    "adicional", "componente", "formato", "apresentacao", "dimensao", "medida", "cor", "medico", "hospitalar",
+    // unidades, materiais e quantificadores: descrevem o item, não dizem o que ele é
+    "fr", "french", "ch", "cm", "mm", "ml", "calibre", "diametro", "comprimento", "capacidade", "volume",
+    "poliuretano", "silicone", "pvc", "latex", "aco", "inox", "inoxidavel", "nylon", "polimero", "plastico",
+    "diverso", "variado", "nao", "sem", "cerca", "aproximadamente", "esterilidade", "medio", "pequeno", "grande",
+  ].map(radical),
+);
+
+/**
+ * As primeiras palavras que dizem o que o item é. Em "CATETER INTRAVENOSO 18G COM AGULHA
+ * SILICONIZADA", o item é um cateter intravenoso: a agulha é só um detalhe da descrição.
+ */
+export function comecoDoItem(palavras: string[], quantas = 3): string[] {
+  const comeco: string[] = [];
+  for (const palavra of palavras) {
+    if (palavra.length < 2 || /\d/.test(palavra) || SEM_SIGNIFICADO.has(palavra) || FRACAS.has(palavra)) continue;
+    if (!comeco.includes(palavra)) comeco.push(palavra);
+    if (comeco.length === quantas) break;
+  }
+  return comeco;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,64 +216,106 @@ type Candidato = {
   detalhe: Omit<DetalheDoCasamento, "outrosProdutos">;
 };
 
+/** A palavra do produto aparece no item? 1 = igual; entre 0,5 e 1 = escrita parecida; 0 = não. */
+function presenca(
+  nucleo: ProdutoPreparado["nucleo"],
+  indice: number,
+  texto: TextoPreparado,
+  palavrasDoItem: string[],
+): number {
+  const { palavra } = nucleo[indice];
+  const posicoes = texto.posicoes.get(palavra);
+  // Palavra muito curta ("j" de "duplo j", "ii") só vale colada à palavra anterior do nome.
+  if (palavra.length <= 2) {
+    const anteriores = indice > 0 ? texto.posicoes.get(nucleo[indice - 1].palavra) : undefined;
+    return posicoes && anteriores?.some((p) => posicoes.includes(p + 1)) ? 1 : 0;
+  }
+  if (posicoes) return 1;
+  let melhor = 0;
+  for (const outra of palavrasDoItem) {
+    if (Math.abs(outra.length - palavra.length) > 3) continue;
+    const s = semelhanca(palavra, outra);
+    if (s > melhor) melhor = s;
+  }
+  return melhor >= SEMELHANCA_MINIMA ? melhor : 0;
+}
+
 function avaliar(
   produto: ProdutoPreparado,
   texto: TextoPreparado,
   palavrasDoItem: string[],
   medidasDoItem: () => MedidasExtraidas,
   limites: { limiteCompativel: number; limiteVerificar: number },
+  /** As primeiras palavras do item: o que ele é. */
+  comeco: string[],
   /** Palavras fortes dos produtos candidatos que aparecem no item. */
-  vocabulario: Map<string, string>,
+  vocabulario: Set<string>,
 ): Candidato | null {
   const palavraChave = primeiroTermo(texto, produto.palavrasChave, { proximas: false });
+  const doNome = new Set(produto.nucleo.map((n) => n.palavra));
 
   let pesoTotal = 0;
   let pesoExato = 0;
   let pesoParecido = 0;
   let fortes = 0;
   let fortesAchadas = 0;
-  for (const { palavra, peso } of produto.nucleo) {
+  let temOTipoDoProduto: boolean | null = null;
+  const presencas = produto.nucleo.map((_, indice) => presenca(produto.nucleo, indice, texto, palavrasDoItem));
+  // "duplo j" é uma coisa só: sem o "j" colado, o "duplo" de "duplo lúmen" não conta.
+  produto.nucleo.forEach(({ palavra }, indice) => {
+    if (palavra.length <= 2 && presencas[indice] === 0 && indice > 0) presencas[indice - 1] = 0;
+  });
+  produto.nucleo.forEach(({ peso }, indice) => {
+    const achou = presencas[indice];
     pesoTotal += peso;
-    if (peso === 1) fortes++;
-    if (texto.posicoes.has(palavra)) {
-      pesoExato += peso;
-      pesoParecido += peso;
-      if (peso === 1) fortesAchadas++;
-      continue;
+    if (achou === 1) pesoExato += peso;
+    pesoParecido += peso * achou;
+    if (peso === 1) {
+      fortes++;
+      if (achou > 0) fortesAchadas++;
+      // A primeira palavra forte do nome diz o tipo do produto ("cateter", "processador").
+      temOTipoDoProduto ??= achou > 0;
     }
-    let melhor = 0;
-    for (const outra of palavrasDoItem) {
-      if (Math.abs(outra.length - palavra.length) > 3) continue;
-      const s = semelhanca(palavra, outra);
-      if (s > melhor) melhor = s;
-    }
-    if (melhor >= SEMELHANCA_MINIMA) {
-      pesoParecido += peso * melhor;
-      if (peso === 1) fortesAchadas++;
-    }
-  }
+  });
   const cobertura = pesoTotal > 0 ? pesoExato / pesoTotal : 0;
   const similaridade = pesoTotal > 0 ? pesoParecido / pesoTotal : 0;
 
-  // Sem palavra-chave, o item precisa citar o tipo do produto ("cateter", "bainha") e mais
-  // uma palavra forte do nome: "cateter" sozinho não liga cateter ureteral a cateter venoso.
-  const citaOTipo = produto.cabeca !== null && texto.posicoes.has(produto.cabeca);
-  if (!palavraChave && (!citaOTipo || fortesAchadas < Math.min(2, fortes))) return null;
-
-  // O item cita palavras que definem OUTRO produto do catálogo e que este não tem
-  // ("duplo j" num cateter ureteral simples): cada uma pesa contra.
+  let textoCasa = 1;
   const deOutroProduto: string[] = [];
   if (!palavraChave) {
-    for (const [palavra, original] of vocabulario) {
-      if (!produto.nucleo.some((n) => n.palavra === palavra)) deOutroProduto.push(original);
-    }
-  }
-  const precisao = 1 - 0.12 * Math.min(deOutroProduto.length, 3);
+    // O item precisa SER do tipo do produto: a primeira palavra da descrição está no nome do
+    // produto. "SONDA de aspiração flexível" não é "BAINHA para aspiração flexível".
+    if (comeco.length === 0 || !doNome.has(comeco[0])) return null;
+    // E ter ao menos duas palavras fortes do nome: "cateter" sozinho não liga cateter
+    // ureteral a cateter venoso.
+    if (fortesAchadas < Math.min(2, fortes)) return null;
 
-  const textoCasa = palavraChave ? 1 : (0.7 * cobertura + 0.3 * similaridade) * precisao;
+    // Pesa contra: o item cita o que define OUTRO produto do catálogo ("duplo j" num cateter
+    // ureteral simples) ou se apresenta com palavras que o produto não tem ("cateter VENOSO
+    // CENTRAL"). A primeira pesa mais: é sinal claro de que o item é o outro produto.
+    let desconto = 0;
+    for (const palavra of vocabulario) {
+      if (doNome.has(palavra)) continue;
+      deOutroProduto.push(palavra);
+      desconto += 0.2;
+    }
+    for (const palavra of comeco.slice(1)) {
+      if (doNome.has(palavra) || deOutroProduto.includes(palavra)) continue;
+      deOutroProduto.push(palavra);
+      desconto += 0.1;
+    }
+    textoCasa = (0.7 * cobertura + 0.3 * similaridade) * (1 - Math.min(desconto, 0.5));
+    // O item não cita o tipo do produto (um "endoscópio" para o produto "processador de
+    // imagem para endoscópio"): só passa se o resto casar muito bem.
+    if (temOTipoDoProduto === false) textoCasa *= 0.75;
+  }
+
   const { confirmadas, diferentes } = compararMedidas(produto.medidas, medidasDoItem());
-  const medida = diferentes.length > 0 ? (confirmadas.length > 0 ? 0.25 : 0) : confirmadas.length > 0 ? 1 : 0.5;
-  const score = Math.round(75 * textoCasa + 25 * medida);
+  // A medida ajusta o score do texto, não o substitui: confirmada mantém; sem medida para
+  // comparar tira um pouco; diferente tira mais, e mais ainda se nenhuma outra medida bater.
+  const fatorDaMedida =
+    diferentes.length > 0 ? (confirmadas.length > 0 ? 0.75 : 0.6) : confirmadas.length > 0 ? 1 : 0.825;
+  const score = Math.round(100 * textoCasa * fatorDaMedida);
 
   let nivel: Nivel | null = null;
   // Medida diferente nunca é "compatível": no máximo fica para verificar.
@@ -328,25 +405,29 @@ export function triarCompra(triagem: TriagemPreparada, compra: CompraParaTriar):
       for (const id of doSegmento) segmentos.add(id);
     }
 
-    const candidatos = new Set<ProdutoPreparado>();
-    for (const palavra of texto.posicoes.keys()) {
-      for (const produto of triagem.porPalavra.get(palavra) ?? []) candidatos.add(produto);
+    // Candidatos: produtos cujo nome tem a primeira palavra do item, e os que têm palavra-chave no item.
+    const comeco = comecoDoItem(texto.palavras);
+    const candidatos = new Set(comeco.length > 0 ? triagem.porPalavra.get(comeco[0]) : []);
+    if (triagem.porChave.size > 0) {
+      for (const palavra of texto.posicoes.keys()) {
+        for (const produto of triagem.porChave.get(palavra) ?? []) candidatos.add(produto);
+      }
     }
     if (candidatos.size === 0) continue;
 
     const palavrasDoItem = [...texto.posicoes.keys()];
     let medidas: MedidasExtraidas | null = null;
     const medidasDoItem = () => (medidas ??= extrairMedidas(item.descricao));
-    // Palavras fortes dos candidatos presentes no item (radical -> como aparece no item).
-    const vocabulario = new Map<string, string>();
+    // Palavras fortes dos candidatos presentes no item.
+    const vocabulario = new Set<string>();
     for (const produto of candidatos) {
       for (const { palavra, peso } of produto.nucleo) {
-        if (peso === 1 && texto.posicoes.has(palavra)) vocabulario.set(palavra, palavra);
+        if (peso === 1 && palavra.length > 2 && texto.posicoes.has(palavra)) vocabulario.add(palavra);
       }
     }
     const avaliados: Candidato[] = [];
     for (const produto of candidatos) {
-      const candidato = avaliar(produto, texto, palavrasDoItem, medidasDoItem, configuracao, vocabulario);
+      const candidato = avaliar(produto, texto, palavrasDoItem, medidasDoItem, configuracao, comeco, vocabulario);
       if (candidato?.nivel) avaliados.push(candidato);
     }
     if (avaliados.length === 0) continue;

@@ -23,6 +23,8 @@ describe("extração de medidas", () => {
     expect(lidas("óptica 3.2MM")).toEqual(["3,2 mm"]);
     expect(lidas("fibra 272UMX 3M")).toEqual(["272 µm", "300 cm"]);
     expect(lidas("frasco 140ML")).toEqual(["140 ml"]);
+    expect(lidas("coletor 1.000ML")).toEqual(["1000 ml"]);
+    expect(lidas("frasco 2,000 ml")).toEqual(["2000 ml"]);
   });
 
   it("lê micrômetros com µm, um e micra", () => {

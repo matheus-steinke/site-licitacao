@@ -144,7 +144,7 @@ describe("item x catálogo", () => {
     const simples = triar([item("CATETER URETERAL 5FR X 70CM")], configuracao({ produtos: CATALOGO.slice(2, 3) }));
     expect(simples.itens[0].score).toBe(100);
     expect(r.itens[0].produtoId).toBe("p3");
-    expect(r.itens[0].detalhe.palavrasDeOutroProduto).toEqual(["duplo", "j"]);
+    expect(r.itens[0].detalhe.palavrasDeOutroProduto).toEqual(["duplo"]);
     expect(r.itens[0].score).toBeLessThan(simples.itens[0].score);
   });
 
@@ -172,6 +172,29 @@ describe("item x catálogo", () => {
     ]);
     expect(r.itens).toEqual([]);
     expect(r.prioridade).toBe(0);
+  });
+
+  it("o item precisa ser do mesmo tipo do produto, não só ter palavras em comum", () => {
+    const catalogo = [
+      produto("1", `BAINHA PARA ASPIRAÇÃO FLEXÍVEL MARCA: UROLLINE / FABRICANTE: WELLEAD 11/13FR - 36CM ${BOILERPLATE}`),
+      produto("2", `AGULHA DE PUNÇÃO INICIAL 18G - 20CM MARCA: UROLLINE / FABRICANTE: WELLEAD ${BOILERPLATE}`),
+      produto("3", "PROCESSADOR DE IMAGEM DIGITAL PARA ENDOSCÓPIO MARCA: UROLLINE / FABRICANTE: WESEEMED"),
+      produto("4", `KIT CATETER DUPLO J INFANTIL 4FR X 14CM COM FIO GUIA TEFLONADO ${BOILERPLATE}`),
+    ];
+    const r = triar(
+      [
+        // É uma sonda, não uma bainha.
+        item("SONDA DE ASPIRAÇÃO TRAQUEAL nº12, em PVC atóxico, flexível e transparente, descartável"),
+        // É um cateter; a agulha é um detalhe da descrição.
+        item("CATETER INTRAVENOSO PERIFÉRICO 18G, COM DISPOSITIVO DE PROTEÇÃO DA AGULHA, PARA PUNÇÃO VENOSA"),
+        // É um endoscópio, não o processador de imagem dele.
+        item("Endoscópio Rígido, ângulo de visão 30°, com processamento de imagem digital"),
+        // "Duplo lúmen" não é "duplo J".
+        item("CATETER VENOSO CENTRAL DUPLO LÚMEN INFANTIL 4FR X 13CM (KIT)"),
+      ],
+      configuracao({ produtos: catalogo }),
+    );
+    expect(r.itens).toEqual([]);
   });
 
   it("tolera erro de digitação pela semelhança de escrita", () => {

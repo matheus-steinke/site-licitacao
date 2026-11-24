@@ -42,6 +42,10 @@ select id as item_sp1 from public.compra_itens where compra_id = :'compra_sp' an
 -- A triagem só pega o que foi gravado há mais de 10 segundos: os testes voltam o relógio.
 update public.compras set conteudo_alterado_em = now() - interval '5 minutes' where not exemplo;
 
+select teste.espera(
+  (select score_compativel = 60 and score_verificar = 50 from public.organizacoes where id = :'org_b'),
+  'limites padrão do score: 60 para compatível e 50 para verificar');
+
 -- ---------------------------------------------------------------------------
 -- O que deixa a triagem desatualizada
 -- ---------------------------------------------------------------------------

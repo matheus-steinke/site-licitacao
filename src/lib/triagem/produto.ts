@@ -20,8 +20,6 @@ export type ProdutoPreparado = {
   codigo: string;
   /** Palavras do nome que definem o produto, já no radical, na ordem em que aparecem. */
   nucleo: { palavra: string; peso: number }[];
-  /** Primeira palavra forte do núcleo ("cateter", "bainha"): o item precisa tê-la. */
-  cabeca: string | null;
   palavrasChave: Termo[];
   medidas: MedidasExtraidas;
   lanceMinimo: number;
@@ -35,11 +33,11 @@ const FIM_DO_NUCLEO =
 const NOME_DE_MARCA = /\b(?:marca|fabricante)\s*:?\s*([a-z][a-z0-9-]{2,})/g;
 
 /** Palavras que dizem pouco sobre qual é o produto. */
-const FRACAS = new Set(
+export const FRACAS = new Set(
   [
     "kit", "conjunto", "sistema", "jogo", "par", "peca", "parte", "modelo", "tipo", "uso", "unico",
     "descartavel", "esteril", "reutilizavel", "digital", "adulto", "infantil", "pediatrico", "ponta",
-    "compativel", "equipamento", "aparelho", "material", "produto", "via", "novo",
+    "compativel", "equipamento", "aparelho", "material", "produto", "via", "novo", "video",
   ].map(radical),
 );
 const PESO_FRACA = 0.3;
@@ -77,7 +75,6 @@ export function prepararProduto(produto: ProdutoBruto, marcas: Set<string> = new
     id: produto.id,
     codigo: produto.codigo,
     nucleo,
-    cabeca: nucleo.find((n) => n.peso === 1)?.palavra ?? nucleo[0]?.palavra ?? null,
     palavrasChave: prepararTermos(produto.palavras_chave ?? []),
     medidas: extrairMedidas(`${produto.nome} ${produto.medidas ?? ""}`),
     lanceMinimo: Number(produto.lance_minimo),
