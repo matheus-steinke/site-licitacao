@@ -20,6 +20,10 @@ on:
         description: "Usar só os N primeiros termos (teste rápido). Em branco = todos."
         required: false
         type: string
+      so_triagem:
+        description: "Pular a coleta: só refazer a triagem das organizações"
+        type: boolean
+        default: false
 
 # Nunca duas rodadas ao mesmo tempo: a nova espera a anterior terminar.
 concurrency:
@@ -46,6 +50,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Rodar o coletor
+        if: ${{ !inputs.so_triagem }}
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

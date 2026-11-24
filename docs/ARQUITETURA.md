@@ -21,7 +21,7 @@ Complementa [`ESPECIFICACAO.md`](ESPECIFICACAO.md). Em caso de conflito, vale a 
 - **Coletor em Node/TypeScript:** usa o mesmo código de normalização e casamento de texto que a triagem e os testes.
 - **Agendamento no GitHub Actions:** gratuito (repositório público), aceita execuções longas e permite instalar `pdftotext`. O coletor é um script independente e pode migrar para Railway sem reescrita.
 - **Motor de triagem em TypeScript puro:** normalização, regex de medidas, similaridade por trigramas e pontuação numa biblioteca testável sem banco. O `pg_trgm` do Postgres fica para a tela de Busca.
-- **Quando a triagem roda:** ao fim de cada rodada do coletor e quando o cliente muda catálogo, exclusões, UFs ou segmentos.
+- **Quando a triagem roda:** ao fim de cada rodada do coletor (para todas as organizações) e no app, ao abrir Oportunidades, quando o cliente mudou catálogo, exclusões, UFs, segmentos, porte ou limites.
 - **Integrações:** interface comum por provedor (conectar, desconectar, reagir a "oportunidade aprovada" e "data mudou"). Google é o primeiro; Outlook, WhatsApp e webhook ficam como provedores vazios.
 
 ## Modelo de dados
@@ -46,15 +46,15 @@ Leitura para qualquer usuário logado; escrita só pelo coletor (service role) o
 
 | Tabela | Conteúdo | Relações |
 |---|---|---|
-| `organizacoes` | razão social, CNPJ, porte, plano, UFs, limites do score, e-mail diário (ligado, hora) | — |
+| `organizacoes` | razão social, CNPJ, porte, plano, UFs, limites do score, controle da triagem (configuração, marca, versão do motor), e-mail diário (ligado, hora) | — |
 | `membros`, `convites` | usuário, papel (dono ou membro); convites por e-mail | → `organizacoes`, usuário |
 | `organizacao_segmentos` | segmentos de interesse | → `segmentos` |
 | `organizacao_exclusoes` | termos que a empresa não fornece (opcionalmente por segmento) | → `segmentos` |
 | `produtos` | ID do cliente (único na organização), referência, produto, preço proposta, lance mínimo e colunas opcionais | → `segmentos` |
 | `produto_arquivos` | catálogo técnico, registro ANVISA (caminho no Storage) | → `produtos` |
 | `importacoes` | arquivo, modo, relatório do que entrou, mudou e deu erro | — |
-| `oportunidades` | status, motivo do descarte, score, alertas, valor estimado; única por organização e compra | → `compras` |
-| `oportunidade_itens` | item, produto sugerido, score e detalhe do casamento, alertas | → `oportunidades`, `compra_itens`, `produtos` |
+| `oportunidades` | status, motivo do descarte, quem e quando decidiu, prioridade (catálogo, verificar ou segmento), score, contagens de itens, segmentos, alertas, valor estimado; única por organização e compra | → `compras` |
+| `oportunidade_itens` | item, produto sugerido, nível (compatível ou verificar), score e detalhe do casamento, alertas, lote | → `oportunidades`, `compra_itens`, `produtos` |
 | `buscas_salvas` | nome e filtros | — |
 | `integracoes` | provedor, conta, credenciais cifradas, agenda e pasta-raiz | — |
 | `integracao_vinculos` | ID do evento ou da pasta já criados, para não duplicar e poder atualizar | → `oportunidades` |
@@ -193,6 +193,55 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     rodada. Com 294 termos a busca leva uns 20 minutos num dia normal; sem o teto, num dia
     ruim ela consumiria a rodada inteira e nenhum item seria baixado. Os termos que não
     couberem ficam para a rodada seguinte, que começa a lista de outro ponto.
+
+## Decisões tomadas na etapa 5
+
+41. **O motor lê tudo do nome do produto.** O catálogo real que serviu de base (129 produtos)
+    não tinha palavras-chave, medidas nem segmento preenchidos: só o nome, com marca,
+    fabricante, medidas e frases de embalagem. O motor separa as palavras que definem o
+    produto, descobre as marcas pelo próprio catálogo ("MARCA: X / FABRICANTE: Y") e lê as
+    medidas do nome. Palavras-chave e o campo de medidas, quando existem, somam.
+42. **O item precisa ser do mesmo tipo do produto.** Na primeira calibração, com 117 mil
+    itens reais, "ter palavras em comum" dava 428 itens compatíveis, quase todos errados
+    ("cateter intravenoso com agulha" casando com "agulha de punção"). A regra passou a ser:
+    a primeira palavra da descrição do item tem de estar no nome do produto, e o tipo do
+    produto tem de estar no começo do item. Resultado: 33 compatíveis, quase todos certos.
+43. **A medida ajusta o score do texto, não soma pontos.** Somando, uma medida igual
+    compensava um texto fraco ("cateter venoso 4 Fr" para "cateter duplo J 4 Fr").
+    Medida diferente nunca é "compatível": fica para verificar, com a diferença explicada.
+44. **Três níveis de oportunidade:** item compatível com o catálogo (prioridade 3), só itens
+    a verificar (2) e só segmento de interesse (1). A lista mostra nessa ordem.
+45. **Limites padrão do score: 60 (compatível) e 50 (verificar)**, ajustáveis em
+    Configurações > Triagem. Com 40 para verificar entrava ruído demais.
+46. **A triagem roda em lotes e sabe o que falta.** Cada compra tem `conteudo_alterado_em`
+    e cada organização uma marca (`triagem_marca`): só é triado o que mudou depois da marca.
+    Gatilhos no banco marcam a triagem como desatualizada quando catálogo, exclusões,
+    segmentos, estados, porte ou limites mudam, e ela recomeça.
+47. **Quem executa:** o coletor, ao fim de cada rodada (chave de serviço), e o app, com a
+    sessão do usuário, quando a empresa mudou algo, ao abrir Oportunidades, com andamento na
+    tela. As mesmas funções do banco atendem os dois e conferem a permissão. Assim a chave
+    de serviço continua só no GitHub Actions (decisão 30) e o cliente não espera 2 horas
+    para ver o efeito de uma mudança no catálogo.
+48. **Mudança de configuração no meio de um lote não grava resultado velho:** o lote leva o
+    instante da configuração com que foi calculado; se a organização mudou algo, a gravação
+    é recusada e o lote é refeito.
+49. **Decisão do cliente é preservada.** Uma oportunidade nova que deixa de casar some; uma
+    já aprovada ou descartada fica (sem itens), para não apagar o histórico.
+50. **O cliente não escreve nas tabelas de oportunidade:** só lê. Triagem e decisão passam
+    por funções do banco (`triagem_gravar`, `decidir_oportunidade`), que conferem que o item
+    é da compra, o produto é da organização e a compra é de um estado atendido.
+51. **Lote pelo começo da descrição** ("LOTE 1 - ...", "GRUPO 2 - ...", "(L3) ..."), já que o
+    PNCP não informa o lote do item. Sem isso na descrição, não há alerta de lote.
+52. **"Disputada" não é gravado:** é a aprovada cuja data de disputa passou (decisão 4).
+    Ganha e Perdida só podem ser marcadas depois da data.
+53. **Valor estimado da oportunidade** = soma de quantidade x valor de referência dos itens
+    compatíveis. O valor pelo lance mínimo aparece no detalhe e será a base do Dashboard.
+54. **Páginas de Oportunidades em blocos (`<Suspense>`):** o título aparece na hora e a lista
+    chega em seguida. Com isso o aviso de navegação do `next dev` (decisão 39) não aparece
+    mais nessas duas páginas; as demais continuam como estavam.
+55. **Calibração com dados reais antes de publicar:** uma organização temporária com cópia
+    do catálogo e todos os estados, os 117 mil itens baixados para um arquivo local e o
+    motor rodado sobre eles a cada ajuste. A organização temporária foi apagada no fim.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

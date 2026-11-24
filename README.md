@@ -14,7 +14,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 2 | Onboarding, Configurações, usuários, admin de segmentos | Pronta |
 | 3 | Catálogo e importação de Excel/CSV | Pronta |
 | 4 | Coletor do PNCP | Pronta |
-| 5 | Triagem e Oportunidades | A fazer |
+| 5 | Triagem e Oportunidades | Pronta |
 | 6 | Busca | A fazer |
 | 7 | Dashboard | A fazer |
 | 8 | Integrações Google Agenda e Drive | A fazer |
@@ -70,6 +70,7 @@ como segredo do GitHub Actions.
 | `pnpm test` | Testes unitários (Vitest) |
 | `pnpm test:db` | Aplica migrations e seed num Postgres local descartável e testa as regras de RLS |
 | `pnpm coletor` | Roda uma rodada do coletor do PNCP (veja a seção Coletor) |
+| `pnpm triagem` | Compara as licitações com o catálogo de cada organização (veja a seção Triagem) |
 
 `pnpm test:db` precisa de um Postgres 15+ local com as extensões `pg_trgm` e `unaccent`
 e de um usuário com permissão para criar bancos. Ele usa
@@ -138,11 +139,16 @@ Dados por organização (um usuário só enxerga a própria organização):
 | `produtos`, `organizacao_exclusoes` | lê e altera | lê e altera | nada |
 | `produto_arquivos` | lê, inclui e exclui | lê, inclui e exclui | nada |
 | `importacoes` | lê e registra | lê e registra | nada |
+| `oportunidades`, `oportunidade_itens` | lê | lê | nada |
 | Storage `produtos` (arquivos) | só a pasta da própria organização | idem | nada |
 
 Criação de organização e aceite de convite passam por funções do banco
 (`criar_organizacao`, `aceitar_convite`), que conferem o usuário logado. Ninguém insere
 direto nessas tabelas.
+
+As oportunidades também só mudam por função do banco: `triagem_gravar` (o resultado da
+triagem, chamado pelo coletor ou por um membro da organização) e `decidir_oportunidade`
+(aprovar, descartar, reabrir, ganha/perdida). Um membro só tria e decide na própria organização.
 
 ## Organizações e usuários
 
@@ -253,7 +259,8 @@ No GitHub, em Settings > Secrets and variables > Actions do repositório:
    `https://SEU-PROJETO.supabase.co`.
 
 Depois, em Actions > Coletor do PNCP > Run workflow, dispare a primeira rodada. Para um teste
-rápido, preencha "termos" com 5.
+rápido, preencha "termos" com 5. Marque "Pular a coleta" para só refazer a triagem das
+organizações, sem consultar o PNCP.
 
 Atenção: em repositório público, o GitHub desativa workflows agendados após 60 dias sem
 atividade no repositório. Basta reativar em Actions.
@@ -284,7 +291,7 @@ nenhum segmento conhecia; eles entraram como sinônimos na migration
 
 ### Casamento de texto (sem IA)
 
-O mesmo código ([`src/lib/texto`](src/lib/texto)) serve ao coletor e servirá à triagem:
+O mesmo código ([`src/lib/texto`](src/lib/texto)) serve ao coletor e à triagem:
 minúsculas, sem acento, sem pontuação, sem preposições, no singular e sem a vogal final
 (para "endoscópio" e "endoscopia" ou "cirúrgico" e "cirúrgica" contarem como iguais).
 
@@ -295,6 +302,85 @@ minúsculas, sem acento, sem pontuação, sem preposições, no singular e sem a
 - Em **textos longos** (o objeto, no plano B), as palavras precisam estar próximas, para não
   juntar pedaços de assuntos diferentes.
 - Sempre palavras inteiras: "uti" não casa com "utilizado".
+
+## Triagem e Oportunidades
+
+A triagem compara **cada item** das licitações dos estados da empresa com o catálogo dela,
+sem IA. O código fica em [`src/lib/triagem`](src/lib/triagem) e é o mesmo no coletor, no app
+e nos testes.
+
+### O que vira oportunidade
+
+Uma licitação da área da saúde, com disputa futura, nos estados da empresa, que tenha:
+
+1. **item compatível com o catálogo** (aparece primeiro);
+2. ou **item a verificar** (casou em parte, ou a medida é diferente);
+3. ou só **item de um segmento de interesse** da empresa.
+
+Quem marcou só "Urologia" não vê licitação de seringas, a não ser que algum item dela case
+com um produto do catálogo.
+
+### Como um item casa com um produto
+
+- **Do nome do produto** saem as palavras que o definem. Marca, fabricante, registro e frases
+  de embalagem ("DESCARTÁVEL. ESTÉRIL. ATÓXICO...") ficam de fora. De
+  `KIT CATETER DUPLO J SOFT 4.7FR X 26CM MARCA: X / FABRICANTE: Y` ficam "kit, cateter, duplo, j, soft".
+- **O item precisa ser do mesmo tipo do produto:** a primeira palavra da descrição do item tem
+  de estar no nome do produto. "SONDA de aspiração flexível" não casa com "BAINHA para
+  aspiração flexível", e "cateter intravenoso com agulha" não casa com "agulha de punção".
+- **Palavras-chave do produto** (coluna opcional da tabela de preços) valem mais que o nome:
+  se o item contém a palavra-chave inteira, o texto casa 100%. Use para sinônimos que o
+  edital usa e o seu nome não ("alça de ressecção" para um produto chamado "alça TURP loop").
+- **Medidas** são lidas dos dois lados: French ("6Fr", "CH 6", "calibre: 18"), cm, mm, µm,
+  ml, polegadas do fio guia ("0,035\""), gauge e faixas ("22-30 cm", "26 a 28 cm"), inclusive
+  "6 x 26" sem unidade. Medida igual (com tolerância) confirma; **medida diferente nunca é
+  compatível**: o item fica para verificar, com a diferença explicada ("pede 7 Fr; produto 6 Fr").
+- **Erros de digitação** são tolerados pela semelhança de escrita (trigramas, o mesmo
+  princípio do `pg_trgm`).
+- **Exclusões** (Catálogo > Exclusões) tiram o item do catálogo e do segmento.
+
+O score vai de 0 a 100. Os limites ficam em **Configurações > Triagem** (padrão: 60 para
+compatível, 50 para verificar).
+
+### Alertas
+
+| Alerta | Quando aparece |
+|---|---|
+| Exclusivo ME/EPP – repassar a parceiro | item exclusivo e a empresa não é ME/EPP (o item não é descartado) |
+| Exclusivo ME/EPP | item exclusivo e a empresa é ME/EPP |
+| Referência abaixo do seu mínimo | valor de referência do edital menor que o lance mínimo do produto |
+| Lote completo / incompleto (faltam itens X, Y) | a descrição dos itens começa com "LOTE n", "GRUPO n" ou "(Ln)" |
+| Cita amostra, comodato, visita técnica; licitação exclusiva ME/EPP | palavra no objeto do edital |
+
+O PNCP não informa o lote de cada item (veja `docs/ARQUITETURA.md`): o alerta de lote só
+existe quando o órgão escreve o lote na descrição. O texto do edital (etapa 10) vai ampliar isso.
+
+### Quando a triagem roda
+
+- **Depois de cada rodada do coletor**, no mesmo workflow do GitHub Actions (`pnpm triagem`),
+  para todas as organizações: só as licitações novas ou alteradas desde a última vez.
+- **No app, ao abrir Oportunidades**, se a empresa mudou catálogo, exclusões, segmentos,
+  estados, porte ou limites: a tela compara tudo de novo em lotes e mostra o andamento.
+  Decisões já tomadas (aprovada, descartada) são mantidas.
+
+Para rodar à mão: `pnpm triagem` (todas as organizações) ou `pnpm triagem --org <id>`, com as
+mesmas variáveis do coletor (`SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`).
+
+### Se aparecer coisa demais ou de menos
+
+Na calibração com 117 mil itens reais, quase todo engano veio de **nomes genéricos** no
+catálogo ("FRASCO COLETOR", "FIO GUIA"), que casam com itens de outras áreas (coletor de
+laboratório, fio guia de intubação). O que resolve, na ordem:
+
+1. **Exclusões:** inclua os termos que não são seus ("intubação", "dreno de tórax", "laboratório").
+2. **Palavras-chave no produto:** para o que o edital chama por outro nome.
+3. **Limites do score:** suba o de "verificar" para ver menos, desça para ver mais.
+
+### Situações de uma oportunidade
+
+Nova → Aprovada (agendada) ou Descartada (com motivo). Depois da data da disputa, a aprovada
+aparece como **Disputada** (não é um status gravado) e pode ser marcada como Ganha ou
+Perdida. Tudo pode ser desfeito.
 
 ## Painel ADMIN
 
@@ -373,8 +459,9 @@ src/components/        componentes (ui/ = shadcn)
 src/lib/               Supabase, autenticação, formatação, acesso a dados
 src/lib/importacao/    leitura e validação da tabela de preços (Excel/CSV)
 src/lib/texto/         normalização e casamento de termos (coletor e triagem)
-coletor/               coletor do PNCP (roda no GitHub Actions)
-.github/workflows/     agendamento do coletor
+src/lib/triagem/       motor da triagem (medidas, pontuação, alertas) e execução em lotes
+coletor/               coletor do PNCP e triagem por organização (rodam no GitHub Actions)
+.github/workflows/     agendamento do coletor e da triagem
 src/proxy.ts           renova a sessão e redireciona visitantes para o login
 ```
 
