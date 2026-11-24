@@ -31,6 +31,41 @@ export type Database = {
         }
         Relationships: []
       }
+      buscas_salvas: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          filtros: Json
+          id: string
+          nome: string
+          org_id: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          filtros: Json
+          id?: string
+          nome: string
+          org_id: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          filtros?: Json
+          id?: string
+          nome?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buscas_salvas_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coletor_erros: {
         Row: {
           criado_em: string
@@ -888,6 +923,7 @@ export type Database = {
       produtos: {
         Row: {
           atualizado_em: string
+          busca: string | null
           codigo: string
           criado_em: string
           fabricante: string | null
@@ -905,6 +941,7 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string
+          busca?: never
           codigo: string
           criado_em?: string
           fabricante?: string | null
@@ -922,6 +959,7 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string
+          busca?: never
           codigo?: string
           criado_em?: string
           fabricante?: string | null
@@ -1035,6 +1073,22 @@ export type Database = {
     }
     Functions: {
       aceitar_convite: { Args: { p_convite: string }; Returns: string }
+      buscar_licitacoes: {
+        Args: {
+          p_ate?: string
+          p_de?: string
+          p_deslocamento?: number
+          p_limite?: number
+          p_modalidades?: number[]
+          p_org: string
+          p_segmentos?: string[]
+          p_situacoes?: number[]
+          p_so_catalogo?: boolean
+          p_termo?: string
+          p_ufs?: string[]
+        }
+        Returns: Json
+      }
       coletor_gravar_compra: {
         Args: { p_arquivos?: Json; p_compra: Json; p_itens?: Json }
         Returns: Json
