@@ -17,6 +17,7 @@ import {
   enderecoDaBusca,
   lerFiltros,
   MODALIDADES,
+  ORDEM_DAS_SITUACOES,
   parametrosDosFiltros,
   SITUACOES_DA_BUSCA,
   temFiltroAlterado,
@@ -308,7 +309,7 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Parametros> })
               <fieldset>
                 <legend className="mb-2 text-sm font-medium">Situação no PNCP</legend>
                 <div className="flex flex-wrap gap-2">
-                  {[1, 4, 2, 3].map((id) => (
+                  {ORDEM_DAS_SITUACOES.map((id) => (
                     <Marcavel key={id} nome="situacoes" valor={String(id)} marcado={filtros.situacoes.includes(id)}>
                       {SITUACOES_DA_BUSCA[id]}
                     </Marcavel>

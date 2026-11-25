@@ -1118,6 +1118,7 @@ export type Database = {
         Args: { p_arquivos?: Json; p_compra: Json; p_itens?: Json }
         Returns: Json
       }
+      coletor_marcar_excluida: { Args: { p_controle: string }; Returns: boolean }
       coletor_remover_itens_antigos: {
         Args: { p_dias?: number; p_limite?: number }
         Returns: Json

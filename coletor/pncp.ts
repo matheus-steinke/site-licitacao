@@ -4,6 +4,9 @@
 
 export const BASE_PNCP = "https://pncp.gov.br";
 
+/** Quantos números de controle cabem numa busca (conferido na API real com 25). */
+export const MAXIMO_DE_CONTROLES_POR_BUSCA = 20;
+
 export class ErroPncp extends Error {
   constructor(
     mensagem: string,
@@ -31,6 +34,13 @@ export type OpcoesCliente = {
   tentativasEmQueda?: number;
   /** Espera antes da 2ª tentativa; dobra a cada nova tentativa. */
   esperaInicialMs?: number;
+  /**
+   * Pausa mínima entre chamadas à API de consulta (/api/consulta/): detalhe e plano B. Ela tem
+   * um limite de requisições bem mais baixo que o das outras e responde 429 ao ser atropelada.
+   */
+  pausaConsultaMs?: number;
+  /** Espera depois de um 429 (limite de requisições); dobra a cada nova tentativa. */
+  esperaNo429Ms?: number;
   fetch?: typeof fetch;
   dormir?: (ms: number) => Promise<void>;
   /** Chamado a cada falha (inclusive as que serão tentadas de novo). */
@@ -77,22 +87,27 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
   const tentativas = opcoes.tentativas ?? 4;
   const tentativasEmQueda = Math.max(opcoes.tentativasEmQueda ?? 10, tentativas);
   const esperaInicialMs = opcoes.esperaInicialMs ?? 1500;
+  const pausaConsultaMs = Math.max(opcoes.pausaConsultaMs ?? 1200, pausaMs);
+  const esperaNo429Ms = Math.max(opcoes.esperaNo429Ms ?? 5000, esperaInicialMs);
   const buscar = opcoes.fetch ?? fetch;
   const dormir = opcoes.dormir ?? dormirPadrao;
 
   let proximaLiberada = 0;
+  let proximaConsultaLiberada = 0;
   let chamadas = 0;
 
-  /** Garante a pausa entre chamadas, mesmo com várias em paralelo. */
-  async function aguardarVez() {
+  /** Garante a pausa entre chamadas, mesmo com várias em paralelo. A consulta tem fila própria, mais lenta. */
+  async function aguardarVez(consulta: boolean) {
     const agora = Date.now();
-    const minhaVez = Math.max(agora, proximaLiberada);
+    const minhaVez = Math.max(agora, proximaLiberada, consulta ? proximaConsultaLiberada : 0);
     proximaLiberada = minhaVez + pausaMs;
+    if (consulta) proximaConsultaLiberada = minhaVez + pausaConsultaMs;
     if (minhaVez > agora) await dormir(minhaVez - agora);
   }
 
   async function obterJson<T>(caminho: string): Promise<T> {
     const url = caminho.startsWith("http") ? caminho : `${BASE_PNCP}${caminho}`;
+    const consulta = url.includes("/api/consulta/");
     let ultimoErro: ErroPncp | undefined;
 
     // Dois limites: um para quedas de conexão (rápidas, aleatórias) e outro para as
@@ -100,7 +115,7 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
     let quedas = 0;
     let outrasFalhas = 0;
     for (let tentativa = 1; ; tentativa++) {
-      await aguardarVez();
+      await aguardarVez(consulta);
       chamadas++;
       let status: number | undefined;
       try {
@@ -147,7 +162,8 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
           outrasFalhas++;
           // "resposta não é JSON" com status 200 costuma ser página de erro do balanceador.
           repetir = outrasFalhas < tentativas && (valeTentarDeNovo(status) || mensagem === "resposta não é JSON");
-          espera = esperaInicialMs * 2 ** (outrasFalhas - 1);
+          // Limite de requisições: insistir logo só mantém o bloqueio; espera bem mais.
+          espera = (status === 429 ? esperaNo429Ms : esperaInicialMs) * 2 ** (outrasFalhas - 1);
         }
         ultimoErro = new ErroPncp(mensagem, url, status);
         opcoes.aoFalhar?.({ url, status, mensagem, tentativa, definitiva: !repetir });
@@ -177,6 +193,35 @@ export function criarClientePncp(opcoes: OpcoesCliente = {}) {
         modalidades: modalidades.join("|"),
       });
       return obterJson<RespostaBusca | undefined>(`/api/search/?${parametros}`);
+    },
+
+    /**
+     * A mesma busca, por números de controle e em qualquer situação: acha também as suspensas,
+     * revogadas e anuladas, que saem da busca de "recebendo proposta". Uma chamada confere
+     * vários controles ("A" OR "B" OR ...; no máximo MAXIMO_DE_CONTROLES_POR_BUSCA). O que não
+     * volta no resultado o PNCP não conhece (contratação excluída, por exemplo).
+     */
+    async buscarPorControles(controles: string[]): Promise<Map<string, ItemBusca>> {
+      if (controles.length > MAXIMO_DE_CONTROLES_POR_BUSCA) {
+        throw new Error(`No máximo ${MAXIMO_DE_CONTROLES_POR_BUSCA} controles por busca.`);
+      }
+      const achadas = new Map<string, ItemBusca>();
+      if (controles.length === 0) return achadas;
+      const parametros = new URLSearchParams({
+        q: controles.map((controle) => `"${controle}"`).join(" OR "),
+        tipos_documento: "edital",
+        ordenacao: "-data",
+        pagina: "1",
+        tam_pagina: "100",
+        status: "todos",
+      });
+      const resposta = await obterJson<RespostaBusca | undefined>(`/api/search/?${parametros}`);
+      const pedidos = new Set(controles);
+      // Só vale o controle exato: outro edital pode citar o número no texto.
+      for (const item of resposta?.items ?? []) {
+        if (pedidos.has(item.numero_controle_pncp)) achadas.set(item.numero_controle_pncp, item);
+      }
+      return achadas;
     },
 
     /** Plano B: todas as contratações com proposta aberta até a data (sem busca por texto). */

@@ -59,6 +59,7 @@ Idioma da interface: português do Brasil. Fuso: America/Sao_Paulo. Moeda: R$ (f
 - Busca pelos termos de TODOS os segmentos, só para disputas de hoje até hoje + 30 dias.
 - Grava compra, órgão, UF, município, modalidade, número, objeto, datas, situação e itens. Atualiza situação e datas a cada rodada (adiada, suspensa, revogada).
 - Sem duplicar. Com retentativa, pausa entre chamadas e registro de erros (tabela de log das rodadas).
+- Licitação que o PNCP informa ter sido excluída (resposta 410 no detalhe) fica no sistema marcada como "Excluída do PNCP" (situação 99, código nosso) e deixa de ser conferida. (Aprovado em 25/11/2026.)
 - Filtro "área da saúde": manter só compras com pelo menos um item que case com algum segmento.
 - Retenção (aprovada em 24/11/2026, para o banco caber no plano gratuito): os itens das licitações com disputa encerrada há mais de 30 dias que nenhuma organização aprovou são apagados. A licitação (objeto, datas, situação, arquivos), as oportunidades e as decisões ficam; as aprovadas guardam os itens. O prazo é configurável.
 - Opcional, se couber no MVP: baixar o PDF do edital/TR, extrair o texto (pdftotext) e guardar, para os alertas do item 5.

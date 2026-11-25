@@ -215,8 +215,11 @@ global: coleta uma vez e todos os clientes enxergam.
    saúde**; os demais ficam marcados como descartados, sem itens, apenas para não serem
    baixados de novo. Dos que entram, baixa também a lista de arquivos.
 3. **Atualiza o que já conhece:** situação e data mudam? Grava o histórico em
-   `compra_alteracoes` (adiada, suspensa, revogada). Editais que sumiram da busca são
-   conferidos um a um pelo endpoint de detalhe.
+   `compra_alteracoes` (adiada, suspensa, revogada). Editais que sumiram da busca de
+   "recebendo proposta" são conferidos pelo **número de controle**, na mesma busca, 20 por
+   chamada: ela devolve a licitação em qualquer situação. O que a busca não conhece vai ao
+   endpoint de detalhe; se ele responder que a contratação foi excluída (410), a licitação
+   fica marcada como **"Excluída do PNCP"** e não é mais conferida.
 4. **Registra a rodada** em `coletor_rodadas` e cada falha em `coletor_erros`. O painel
    Admin > Rodadas do coletor mostra tudo.
 
@@ -231,6 +234,10 @@ Cuidados com o PNCP, que cai com frequência:
   partir de 1,5 s. As duas contagens são separadas: quedas de conexão não gastam as
   tentativas das falhas lentas.
 - Termos que ainda assim falham na busca ganham uma segunda passada no fim, um por vez.
+- **Limite de requisições da API de consulta** (detalhe e plano B): ela responde 429 a quem
+  chama muito, e a partir do GitHub Actions recusava quase tudo. Por isso tem fila própria
+  (1,2 s entre chamadas), espera longa depois de um 429 (5 s, 10 s, 20 s) e, depois de três
+  recusas seguidas, a rodada para de chamar o detalhe e avisa no resumo.
 - **Plano B:** se a busca estiver fora do ar, lista todas as contratações com proposta aberta
   (`/api/consulta/v1/contratacoes/proposta`) e filtra pelo objeto. É mais pesado e menos
   preciso (não enxerga os itens antes de baixar), por isso só entra quando a busca falha.

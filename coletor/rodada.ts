@@ -18,8 +18,15 @@ import {
   type ArquivoColetado,
   type CompraColetada,
 } from "./mapear";
-import { ErroPncp, type ClientePncp } from "./pncp";
-import { resumirErro, type Gravacao, type ItemComSegmentos, type Repositorio, type TotaisDaRodada } from "./repositorio";
+import { ErroPncp, MAXIMO_DE_CONTROLES_POR_BUSCA, type ClientePncp } from "./pncp";
+import {
+  resumirErro,
+  type CompraParaVerificar,
+  type Gravacao,
+  type ItemComSegmentos,
+  type Repositorio,
+  type TotaisDaRodada,
+} from "./repositorio";
 
 export type ConfiguracaoDaRodada = {
   origem: "agendado" | "manual";
@@ -82,6 +89,8 @@ const MAXIMO_DE_ERROS_REGISTRADOS = 200;
 const FALHAS_SEGUIDAS_DE_ITENS = 5;
 /** Depois de tantas gravações seguidas com erro, o banco está fora do ar: encerra a rodada. */
 const FALHAS_SEGUIDAS_DE_BANCO = 5;
+/** Depois disso a rodada para de chamar o detalhe: a API de consulta está recusando (429). */
+const FALHAS_SEGUIDAS_DE_DETALHE = 3;
 
 /** Executa `tarefa` para cada item, com no máximo `limite` ao mesmo tempo. */
 export async function emParalelo<T>(
@@ -149,6 +158,8 @@ export async function executarRodada(
   const descarregarFalhas = async () => {
     while (falhasRegistradas < falhas.length) {
       const falha = falhas[falhasRegistradas++];
+      // 410 é resposta, não falha: o PNCP está dizendo que a contratação foi excluída.
+      if (falha.status === 410) continue;
       totais.erros++;
       if (totais.erros <= MAXIMO_DE_ERROS_REGISTRADOS) {
         await repositorio.registrarErro(rodadaId, {
@@ -401,23 +412,72 @@ export async function executarRodada(
     // -----------------------------------------------------------------------
     await andamento("conferindo editais já conhecidos");
     const ontem = new Date(inicio.getTime() - 86_400_000).toISOString();
-    const revisitar = async (
-      lista: { controle_pncp: string; orgao_cnpj: string; ano: number; sequencial: number }[],
-      comItens: boolean,
-    ) => {
-      await emParalelo(lista, cfg.paralelas, async (conhecida) => {
-        if (semTempo() || candidatas.has(conhecida.controle_pncp)) return;
-        if (comItens && itensForaDoAr()) return;
+    let falhasSeguidasDeDetalhe = 0;
+    let excluidas = 0;
+    const detalheLimitado = () => falhasSeguidasDeDetalhe >= FALHAS_SEGUIDAS_DE_DETALHE;
+
+    // A busca não conhece o controle: pergunta ao detalhe se a contratação foi excluída (410).
+    // O detalhe fica na API de consulta, que recusa quem chama muito (429); por isso só entra
+    // aqui, para poucas compras, e a rodada desiste dele depois de algumas recusas seguidas.
+    const conferirNoDetalhe = async (conhecida: CompraParaVerificar): Promise<CompraColetada | null> => {
+      if (detalheLimitado()) return null;
+      try {
+        const detalhe = await pncp.detalhe(conhecida.orgao_cnpj, conhecida.ano, conhecida.sequencial);
+        falhasSeguidasDeDetalhe = 0;
+        return detalhe ? mapearContratacao(detalhe) : null;
+      } catch (erro) {
+        if (!(erro instanceof ErroPncp)) throw erro;
+        if (erro.status === 410) {
+          falhasSeguidasDeDetalhe = 0;
+          if (await repositorio.marcarExcluida(conhecida.controle_pncp)) {
+            excluidas++;
+            totais.compras_atualizadas++;
+            totais.alteracoes++;
+          }
+        } else {
+          falhasSeguidasDeDetalhe++;
+        }
+        return null;
+      }
+    };
+
+    const revisitar = async (lista: CompraParaVerificar[], comItens: boolean) => {
+      const faltam = lista.filter((conhecida) => !candidatas.has(conhecida.controle_pncp));
+      for (let i = 0; i < faltam.length; i += MAXIMO_DE_CONTROLES_POR_BUSCA) {
+        if (semTempo() || (comItens && itensForaDoAr())) return;
+        const lote = faltam.slice(i, i + MAXIMO_DE_CONTROLES_POR_BUSCA);
+        // Pelo número de controle, a busca devolve a compra em qualquer situação. Uma chamada
+        // confere o lote inteiro.
+        let achadas: Awaited<ReturnType<ClientePncp["buscarPorControles"]>>;
         try {
-          const detalhe = await pncp.detalhe(conhecida.orgao_cnpj, conhecida.ano, conhecida.sequencial);
-          const compra = detalhe ? mapearContratacao(detalhe) : null;
-          if (!compra) return;
-          if (comItens) await processar(compra, true);
-          else contar(await gravar({ compra }));
+          achadas = await pncp.buscarPorControles(lote.map((conhecida) => conhecida.controle_pncp));
         } catch (erro) {
           if (!(erro instanceof ErroPncp)) throw erro;
+          continue; // A busca caiu: o lote fica para a próxima rodada.
         }
-      });
+
+        const atualizar = async (compra: CompraColetada) => {
+          try {
+            if (comItens) await processar(compra, true);
+            else contar(await gravar({ compra }));
+          } catch (erro) {
+            if (!(erro instanceof ErroPncp)) throw erro;
+          }
+        };
+        const semResposta: CompraParaVerificar[] = [];
+        await emParalelo(lote, cfg.paralelas, async (conhecida) => {
+          const achada = achadas.get(conhecida.controle_pncp);
+          const compra = achada ? mapearBusca(achada) : null;
+          if (compra) await atualizar(compra);
+          else semResposta.push(conhecida);
+        });
+        // O que a busca não conhece vai ao detalhe, um por vez (a API de consulta é limitada).
+        for (const conhecida of semResposta) {
+          if (semTempo()) return;
+          const compra = await conferirNoDetalhe(conhecida);
+          if (compra) await atualizar(compra);
+        }
+      }
     };
 
     const pendentes = await repositorio.listarPendentes(janelaInicio, janelaInicio, cfg.maximoDeVerificacoes);
@@ -434,7 +494,11 @@ export async function executarRodada(
     const paraVerificar = await repositorio.listarParaVerificar(ontem, janelaInicio, cfg.maximoDeVerificacoes);
     await revisitar(paraVerificar, false);
     await descarregarFalhas();
-    registrar(`verificação: ${paraVerificar.length} conferidas no detalhe, ${pendentes.length} pendentes revisitadas`);
+    registrar(
+      `verificação: ${paraVerificar.length} conferidas pelo número de controle, ${pendentes.length} pendentes revisitadas, ` +
+        `${excluidas} excluídas do PNCP`,
+    );
+    if (detalheLimitado()) avisos.push("A API de consulta do PNCP recusou as chamadas (limite de requisições).");
 
     if (itensForaDoAr()) avisos.push("A API de itens do PNCP está fora do ar.");
     if (semTempo()) avisos.push("O tempo máximo da rodada acabou; o restante fica para a próxima.");

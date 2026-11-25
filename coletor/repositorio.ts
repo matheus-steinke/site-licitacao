@@ -76,7 +76,15 @@ export interface Repositorio {
    * nenhuma organização aprovou. A compra em si, as oportunidades e as decisões ficam.
    */
   removerItensAntigos(dias: number, limite: number): Promise<ItensRemovidos>;
+  /**
+   * O PNCP respondeu que a contratação foi excluída: marca com a situação 99 e registra a
+   * alteração. Devolve se algo mudou (false se já estava marcada ou se não conhecemos a compra).
+   */
+  marcarExcluida(controle: string): Promise<boolean>;
 }
+
+/** Código nosso (o PNCP usa de 1 a 4): a contratação foi excluída do portal. */
+export const SITUACAO_EXCLUIDA = 99;
 
 /**
  * Deixa uma mensagem de erro curta e numa linha só. Quando o Supabase está
@@ -145,6 +153,8 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
       .from("compras")
       .select("controle_pncp, orgao_cnpj, ano, sequencial")
       .eq("exemplo", false)
+      // Excluída do PNCP não volta: não há o que conferir.
+      .neq("situacao_id", SITUACAO_EXCLUIDA)
       .gte("data_disputa", desde)
       .or(`verificado_em.is.null,verificado_em.lt.${antesDe}`);
     consulta = filtro === "saude" ? consulta.eq("area_saude", true) : consulta.is("area_saude", null);
@@ -275,6 +285,12 @@ export function criarRepositorioSupabase(url: string, chaveDeServico: string): R
       if (error) falhar("remover itens antigos", error.message);
       return data as ItensRemovidos;
     },
+
+    async marcarExcluida(controle) {
+      const { data, error } = await tentarNoBanco(() => supabase.rpc("coletor_marcar_excluida", { p_controle: controle }));
+      if (error) falhar(`marcar excluída ${controle}`, error.message);
+      return data === true;
+    },
   };
 }
 
@@ -304,6 +320,7 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
   const listar = (saude: boolean, desde: string, antesDe: string, limite: number) =>
     [...compras.values()]
       .filter((c) => (saude ? c.area_saude === true : c.area_saude === null))
+      .filter((c) => c.compra.situacao_id !== SITUACAO_EXCLUIDA)
       .filter((c) => (c.compra.data_disputa ?? "") >= desde)
       .filter((c) => c.verificado_em === null || c.verificado_em < antesDe)
       .slice(0, limite)
@@ -407,6 +424,17 @@ export function criarRepositorioMemoria(segmentos: SegmentoBruto[], agora: () =>
         c.itens_removidos_em = agora().toISOString();
       }
       return resultado;
+    },
+    async marcarExcluida(controle) {
+      const c = compras.get(controle);
+      if (!c) return false;
+      const mudou = c.compra.situacao_id !== SITUACAO_EXCLUIDA;
+      if (mudou) {
+        alteracoes.push({ controle_pncp: controle, campo: "situacao_id", de: c.compra.situacao_id, para: SITUACAO_EXCLUIDA });
+        c.compra = { ...c.compra, situacao_id: SITUACAO_EXCLUIDA };
+      }
+      c.verificado_em = agora().toISOString();
+      return mudou;
     },
   };
 

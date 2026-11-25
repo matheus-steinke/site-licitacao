@@ -5,6 +5,8 @@ export const SITUACOES: Record<number, string> = {
   2: "Revogada",
   3: "Anulada",
   4: "Suspensa",
+  // Código nosso: o PNCP respondeu que a contratação foi excluída do portal.
+  99: "Excluída do PNCP",
 };
 
 /** Endereço público do edital no portal do PNCP. */

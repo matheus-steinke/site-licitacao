@@ -69,16 +69,19 @@ type Mundo = {
   buscaFalhaSempre?: string[];
   itens?: Record<number, ItemPncp[] | "fora">;
   arquivos?: Record<number, ArquivoPncp[] | "fora">;
-  detalhes?: Record<number, ContratacaoPncp>;
+  /** O que o detalhe responde: a contratação, "excluida" (410) ou "limitado" (429). */
+  detalhes?: Record<number, ContratacaoPncp | "excluida" | "limitado">;
+  /** O que a busca pelo número de controle acha (em qualquer situação). Sem nada, não acha. */
+  porControle?: Record<number, ItemBusca | "fora">;
   propostas?: Record<number, ContratacaoPncp[]>;
 };
 
 function pncpFalso(mundo: Mundo) {
   const chamadas: string[] = [];
   const falhas: { url: string; status?: number; mensagem: string }[] = [];
-  const falhar = (url: string): never => {
-    falhas.push({ url, status: 503, mensagem: "HTTP 503" });
-    throw new ErroPncp("HTTP 503", url, 503);
+  const falhar = (url: string, status = 503): never => {
+    falhas.push({ url, status, mensagem: `HTTP ${status}` });
+    throw new ErroPncp(`HTTP ${status}`, url, status);
   };
   const pncp = {
     chamadas: 0,
@@ -100,9 +103,24 @@ function pncpFalso(mundo: Mundo) {
       const data = pagina === 1 ? (mundo.propostas?.[modalidade] ?? []) : [];
       return { data, totalRegistros: data.length, totalPaginas: 1, numeroPagina: pagina, paginasRestantes: 0, empty: data.length === 0 };
     },
-    async detalhe(_cnpj: string, _ano: number, sequencial: number) {
+    async buscarPorControles(controles: string[]) {
+      const sequenciais = controles.map((controle) => Number(controle.slice(17, 23)));
+      chamadas.push(`controles:${sequenciais.join(",")}`);
+      const achadas = new Map<string, ItemBusca>();
+      controles.forEach((controle, i) => {
+        const achada = mundo.porControle?.[sequenciais[i]];
+        if (achada === "fora") falhar(`https://pncp.gov.br/api/search/?q=${controle}`);
+        else if (achada) achadas.set(controle, achada);
+      });
+      return achadas;
+    },
+    async detalhe(cnpj: string, ano: number, sequencial: number) {
       chamadas.push(`detalhe:${sequencial}`);
-      return mundo.detalhes?.[sequencial];
+      const url = `https://pncp.gov.br/api/consulta/v1/orgaos/${cnpj}/compras/${ano}/${sequencial}`;
+      const detalhe = mundo.detalhes?.[sequencial];
+      if (detalhe === "excluida") return falhar(url, 410);
+      if (detalhe === "limitado") return falhar(url, 429);
+      return detalhe;
     },
     async itens(_cnpj: string, _ano: number, sequencial: number) {
       chamadas.push(`itens:${sequencial}`);
@@ -428,21 +446,126 @@ describe("rodada do coletor", () => {
     expect(chamadas).toEqual(expect.arrayContaining(["proposta:6:1", "proposta:8:1"]));
   });
 
-  it("confere no detalhe as compras conhecidas que sumiram da busca (ex.: revogadas)", async () => {
-    const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
-    await rodar({ busca: { trocarte: [daBusca(1)] }, itens: { 1: [{ numeroItem: 1, descricao: "TROCARTE" }] } }, memoria);
-
+  describe("compras conhecidas que sumiram da busca de 'recebendo proposta'", () => {
+    const coletada: Mundo = { busca: { trocarte: [daBusca(1)] }, itens: { 1: [{ numeroItem: 1, descricao: "TROCARTE" }] } };
     const depois = new Date("2026-11-22T17:00:00Z");
-    const { totais, chamadas } = await rodar(
-      { busca: { trocarte: [] }, detalhes: { 1: doDetalhe(1, { situacaoCompraId: 2 }) } },
-      memoria,
-      { ...CFG, agora: () => depois },
-    );
-    expect(chamadas).toContain("detalhe:1");
-    expect(chamadas.filter((c) => c.startsWith("itens"))).toEqual([]);
-    expect(totais).toMatchObject({ compras_atualizadas: 1, alteracoes: 1 });
-    expect(memoria.compras.get(chave(1))?.compra.situacao_id).toBe(2);
-    expect(memoria.alteracoes.at(-1)).toMatchObject({ campo: "situacao_id", de: 1, para: 2 });
+    const DEPOIS = { ...CFG, agora: () => depois };
+
+    it("confere pelo número de controle, sem chamar o detalhe (ex.: revogada)", async () => {
+      const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+      await rodar(coletada, memoria);
+
+      const { totais, chamadas } = await rodar(
+        { busca: { trocarte: [] }, porControle: { 1: daBusca(1, { situacao_id: "2" }) } },
+        memoria,
+        DEPOIS,
+      );
+      expect(chamadas).toContain("controles:1");
+      expect(chamadas.filter((c) => c.startsWith("detalhe") || c.startsWith("itens"))).toEqual([]);
+      expect(totais).toMatchObject({ compras_atualizadas: 1, alteracoes: 1, erros: 0, status: "sucesso" });
+      expect(memoria.compras.get(chave(1))?.compra.situacao_id).toBe(2);
+      expect(memoria.alteracoes.at(-1)).toMatchObject({ campo: "situacao_id", de: 1, para: 2 });
+    });
+
+    it("se a busca não conhece o controle, pergunta ao detalhe", async () => {
+      const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+      await rodar(coletada, memoria);
+
+      const { totais, chamadas } = await rodar(
+        { busca: { trocarte: [] }, detalhes: { 1: doDetalhe(1, { situacaoCompraId: 4 }) } },
+        memoria,
+        DEPOIS,
+      );
+      expect(chamadas).toEqual(expect.arrayContaining(["controles:1", "detalhe:1"]));
+      expect(totais).toMatchObject({ compras_atualizadas: 1, alteracoes: 1 });
+      expect(memoria.compras.get(chave(1))?.compra.situacao_id).toBe(4);
+    });
+
+    it("contratação excluída do PNCP (410) é marcada, sem contar como erro, e não é mais conferida", async () => {
+      const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+      await rodar(coletada, memoria);
+
+      const mundo: Mundo = { busca: { trocarte: [] }, detalhes: { 1: "excluida" } };
+      const { totais } = await rodar(mundo, memoria, DEPOIS);
+      expect(totais).toMatchObject({ compras_atualizadas: 1, alteracoes: 1, erros: 0, status: "sucesso" });
+      expect(memoria.erros).toEqual([]);
+      expect(memoria.compras.get(chave(1))?.compra.situacao_id).toBe(99);
+      expect(memoria.alteracoes.at(-1)).toMatchObject({ campo: "situacao_id", de: 1, para: 99 });
+
+      const maisTarde = new Date("2026-11-22T19:00:00Z");
+      const { chamadas } = await rodar(mundo, memoria, { ...CFG, agora: () => maisTarde });
+      expect(chamadas.filter((c) => c.startsWith("controle") || c.startsWith("detalhe"))).toEqual([]);
+    });
+
+    it("para de chamar o detalhe depois de três recusas seguidas por limite de requisições (429)", async () => {
+      const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+      const sequenciais = [1, 2, 3, 4, 5, 6];
+      await rodar(
+        {
+          busca: { trocarte: sequenciais.map((n) => daBusca(n)) },
+          itens: Object.fromEntries(sequenciais.map((n) => [n, [{ numeroItem: 1, descricao: "TROCARTE" }]])),
+        },
+        memoria,
+      );
+
+      const { totais, chamadas } = await rodar(
+        {
+          // Uma compra nova aparece na busca: a rodada funciona, só o detalhe é recusado.
+          busca: { trocarte: [daBusca(7)] },
+          itens: { 7: [{ numeroItem: 1, descricao: "TROCARTE" }] },
+          detalhes: Object.fromEntries(sequenciais.map((n) => [n, "limitado" as const])),
+        },
+        memoria,
+        DEPOIS,
+      );
+      // Uma chamada só confere as seis.
+      expect(chamadas.filter((c) => c.startsWith("controles"))).toEqual(["controles:1,2,3,4,5,6"]);
+      expect(chamadas.filter((c) => c.startsWith("detalhe"))).toHaveLength(3);
+      expect(totais).toMatchObject({ erros: 3, status: "parcial" });
+      expect(totais.mensagem).toContain("limite de requisições");
+      // Nada foi alterado: as compras continuam como estavam e voltam na próxima rodada.
+      expect([...memoria.compras.values()].every((c) => c.compra.situacao_id === 1)).toBe(true);
+    });
+
+    it("confere em lotes de 20 controles por chamada", async () => {
+      const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+      const sequenciais = Array.from({ length: 45 }, (_, i) => i + 1);
+      await rodar(
+        {
+          busca: { trocarte: sequenciais.map((n) => daBusca(n)) },
+          itens: Object.fromEntries(sequenciais.map((n) => [n, [{ numeroItem: 1, descricao: "TROCARTE" }]])),
+        },
+        memoria,
+      );
+
+      const { totais, chamadas } = await rodar(
+        {
+          busca: { trocarte: [] },
+          porControle: Object.fromEntries(sequenciais.map((n) => [n, daBusca(n, { situacao_id: n === 45 ? "4" : "1" })])),
+        },
+        memoria,
+        DEPOIS,
+      );
+      const lotes = chamadas.filter((c) => c.startsWith("controles")).map((c) => c.split(",").length);
+      expect(lotes).toEqual([20, 20, 5]);
+      expect(chamadas.filter((c) => c.startsWith("detalhe"))).toEqual([]);
+      expect(totais).toMatchObject({ alteracoes: 1, erros: 0, status: "sucesso" });
+      expect(memoria.compras.get(chave(45))?.compra.situacao_id).toBe(4);
+    });
+
+    it("uma queda da busca pelo controle não leva ao detalhe nem altera a compra", async () => {
+      const memoria = criarRepositorioMemoria(SEGMENTOS, () => AGORA);
+      await rodar(coletada, memoria);
+
+      const { chamadas } = await rodar(
+        { busca: { trocarte: [] }, porControle: { 1: "fora" }, detalhes: { 1: "excluida" } },
+        memoria,
+        DEPOIS,
+      );
+      expect(chamadas).toContain("controles:1");
+      expect(chamadas).not.toContain("detalhe:1");
+      expect(memoria.compras.get(chave(1))?.compra.situacao_id).toBe(1);
+    });
   });
 
   it("respeita o máximo de compras por rodada, começando pelas disputas mais próximas", async () => {

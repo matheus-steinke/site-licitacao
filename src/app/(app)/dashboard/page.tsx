@@ -204,7 +204,7 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Parametros> })
             alterada no PNCP
           </AlertTitle>
           <AlertDescription>
-            Suspensa, revogada ou anulada. Enquanto estiver aprovada, ela continua na contagem e no valor em disputa.
+            Suspensa, revogada, anulada ou excluída. Enquanto estiver aprovada, ela continua na contagem e no valor em disputa.
             Confira em Próximas disputas e, se não for mais disputar, desfaça a aprovação na página da licitação.
           </AlertDescription>
         </Alert>

@@ -333,6 +333,31 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     view: uma empresa aprova dezenas ou centenas de licitações, não milhares, e assim a regra
     fica coberta por testes unitários. Há um teto de 10 mil linhas por consulta.
 
+## Ajuste do coletor depois da etapa 7 (25/11/2026)
+
+74. **A conferência das licitações conhecidas passou do detalhe para a busca.** O detalhe
+    (`/api/consulta/v1/orgaos/...`) tem um limite de requisições baixo: chamado a partir do
+    GitHub Actions, respondia 429 ("Limite de requisições excedido") em quase tudo. Numa
+    rodada, 395 de 400 conferências falharam, depois de 22 minutos de tentativas, e isso
+    vinha acontecendo havia pelo menos um dia: mudanças de situação demoravam a aparecer.
+    A busca do portal aceita o número de controle entre aspas, com `status=todos`, e devolve a
+    licitação em qualquer situação (suspensa, revogada, anulada). Várias de uma vez:
+    `"A" OR "B" OR ...`. O coletor confere em **lotes de 20 controles por chamada**: 400
+    conferências viram 20 chamadas, numa API que não bloqueia o GitHub. Conferido na API real
+    com 25 controles: voltaram os 23 existentes e nenhum estranho.
+75. **O detalhe só entra para o que a busca não conhece**, um por vez, para descobrir se a
+    licitação foi excluída. A API de consulta (detalhe e plano B) ganhou uma fila própria,
+    com 1,2 s entre chamadas, e espera longa depois de um 429 (5 s, 10 s, 20 s). Depois de
+    três recusas seguidas, a rodada para de chamar o detalhe e avisa no resumo. O limite
+    exato do PNCP não é publicado e não foi possível medi-lo a partir do GitHub; a fila lenta
+    é uma margem de segurança, e o plano B (que também usa a consulta) pode continuar lento
+    quando a busca estiver fora do ar.
+76. **Licitação excluída do PNCP** (o detalhe responde 410, "A contratação informada foi
+    excluída") é marcada com a **situação 99**, um código nosso (o PNCP usa de 1 a 4), pela
+    função `coletor_marcar_excluida` (só a chave de serviço). Ela continua no banco, aparece
+    como "Excluída do PNCP" nas telas, entra no histórico de alterações e deixa de ser
+    conferida. A resposta 410 não conta como erro da rodada.
+
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 
 - **Busca** (`/api/search/`): aceita `modalidades=6|8` e `ufs=PR|SC`; devolve

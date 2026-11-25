@@ -122,6 +122,75 @@ describe("cliente do PNCP", () => {
     expect(esperas[0]).toBeGreaterThan(250);
     expect(esperas[1]).toBeGreaterThan(550);
   });
+
+  it("busca vários números de controle numa chamada, em qualquer situação, e só aceita os controles pedidos", async () => {
+    const a = "06140818000196-1-000056/2026";
+    const b = "27080605002059-1-000333/2026";
+    const excluida = "01203485000183-1-000129/2026";
+    const item = (numero: string, situacao: string) => ({ numero_controle_pncp: numero, situacao_id: situacao });
+    const { cliente, urls } = clienteFalso([
+      // Outro edital que só cita um dos números no texto não serve.
+      { status: 200, corpo: JSON.stringify({ items: [item("99999999000199-1-000001/2026", "1"), item(a, "4"), item(b, "2")], total: 3 }) },
+    ]);
+    const achadas = await cliente.buscarPorControles([a, b, excluida]);
+    expect([...achadas.keys()]).toEqual([a, b]);
+    expect(achadas.get(a)).toMatchObject({ situacao_id: "4" });
+    expect(achadas.has(excluida)).toBe(false);
+
+    const url = new URL(urls[0]);
+    expect(url.pathname).toBe("/api/search/");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: `"${a}" OR "${b}" OR "${excluida}"`,
+      tipos_documento: "edital",
+      ordenacao: "-data",
+      pagina: "1",
+      tam_pagina: "100",
+      status: "todos",
+    });
+  });
+
+  it("lista vazia de controles não chama o PNCP; mais de 20 por chamada é recusado", async () => {
+    const { cliente, urls } = clienteFalso([]);
+    await expect(cliente.buscarPorControles([])).resolves.toEqual(new Map());
+    await expect(cliente.buscarPorControles(Array.from({ length: 21 }, (_, i) => `c${i}`))).rejects.toThrow("No máximo 20");
+    expect(urls).toEqual([]);
+  });
+
+  it("a API de consulta (detalhe, plano B) tem fila própria, mais lenta que as outras", async () => {
+    const { cliente, esperas } = clienteFalso(
+      Array.from({ length: 4 }, () => ({ status: 200, corpo: "{}" })),
+      { pausaMs: 300 },
+    );
+    await Promise.all([
+      cliente.detalhe("04092680000171", 2026, 1),
+      cliente.detalhe("04092680000171", 2026, 2),
+      cliente.obterJson("/api/search/?q=x"),
+      cliente.detalhe("04092680000171", 2026, 3),
+    ]);
+    // 2º detalhe: 1,2 s depois do 1º. A busca só respeita a pausa geral (300 ms depois dele).
+    // 3º detalhe: mais 1,2 s depois do 2º.
+    expect(esperas).toHaveLength(3);
+    expect(esperas[0]).toBeGreaterThan(1150);
+    expect(esperas[1]).toBeGreaterThan(1450);
+    expect(esperas[1]).toBeLessThan(1600);
+    expect(esperas[2]).toBeGreaterThan(2350);
+  });
+
+  it("depois de um 429 (limite de requisições) espera bem mais antes de insistir", async () => {
+    const { cliente, esperas } = clienteFalso([
+      { status: 429, corpo: "<html>Limite de requisições excedido</html>" },
+      { status: 429 },
+      { status: 200, corpo: '{"ok":true}' },
+    ]);
+    await expect(cliente.obterJson("/x")).resolves.toEqual({ ok: true });
+    expect(esperas).toEqual([5000, 10000]);
+  });
+
+  it("410 (contratação excluída) não é tentado de novo e chega a quem chamou", async () => {
+    const { cliente, urls } = clienteFalso([{ status: 410, corpo: '{"message":"A contratação informada foi excluída"}' }]);
+    await expect(cliente.detalhe("01203485000183", 2026, 129)).rejects.toMatchObject({ status: 410 });
+    expect(urls).toHaveLength(1);
+  });
 });
 
 describe("mensagem de erro de conexão", () => {

@@ -4,7 +4,15 @@
 import { TODAS_UFS } from "../ufs";
 
 export const MODALIDADES: Record<number, string> = { 6: "Pregão eletrônico", 8: "Dispensa eletrônica" };
-export const SITUACOES_DA_BUSCA: Record<number, string> = { 1: "Divulgada", 4: "Suspensa", 2: "Revogada", 3: "Anulada" };
+export const SITUACOES_DA_BUSCA: Record<number, string> = {
+  1: "Divulgada",
+  4: "Suspensa",
+  2: "Revogada",
+  3: "Anulada",
+  99: "Excluída do PNCP",
+};
+/** A ordem em que as situações aparecem nos filtros. */
+export const ORDEM_DAS_SITUACOES = [1, 4, 2, 3, 99];
 export const RESULTADOS_POR_PAGINA = 20;
 
 export type FiltrosDeBusca = {
