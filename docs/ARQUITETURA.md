@@ -303,6 +303,36 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
       baixa os itens de novo e a marca `itens_removidos_em` é apagada.
     - A limpeza não muda `conteudo_alterado_em`, então não dispara triagem de novo.
 
+## Decisões tomadas na etapa 7
+
+68. **O Dashboard só conta o que a empresa aprovou.** Disputada = aprovada, ganha ou perdida
+    com a data da disputa já passada; agendada = aprovada com disputa futura. São as mesmas
+    regras das abas "Disputadas" e "Agendadas" de Oportunidades, então os números batem
+    (com o período "Tudo").
+69. **Valor em disputa = quantidade × lance mínimo, só nos itens "compatível"** das
+    agendadas. Itens "verificar" não entram, porque o casamento ainda não foi conferido por
+    ninguém. O cálculo é feito na consulta (view `oportunidades_aprovadas`, com
+    `security_invoker`), então acompanha a tabela de preços na hora: mudou o lance mínimo,
+    mudou o valor. Agendada sem item compatível conta na quantidade e soma zero; o cartão
+    avisa quantas são.
+70. **Um filtro de período só, sobre a data da disputa, para tudo** (cartões, gráficos e
+    lista). Atalhos: últimos 12 meses (padrão), este mês, este ano e tudo, mais datas livres.
+    "Últimos 12 meses" vai do começo do mês de 11 meses atrás **em diante**, sem data final,
+    para as agendadas aparecerem no padrão. A tela escreve o período por extenso ("Disputas
+    de 01/12/2025 em diante"). O período fica no endereço, como na Busca.
+71. **Agendada suspensa, revogada ou anulada continua na conta**, como manda a especificação
+    (agendada = aprovada com disputa futura), mas a tela avisa quantas são e a lista de
+    próximas disputas mostra a situação. Para tirar da conta, o cliente desfaz a aprovação.
+72. **Gráficos sem biblioteca:** colunas e barras em HTML e CSS, renderizadas no servidor.
+    Por mês (colunas empilhadas, até 12 meses, no horário de Brasília, com os meses vazios
+    preenchidos) e por estado (barras, os 8 maiores e "Outros"). Duas cores conferidas para
+    daltonismo e contraste (`--grafico-disputadas`, `--grafico-agendadas`), legenda, total na
+    ponta de cada barra, detalhe ao passar o mouse ou focar com o teclado, e "Ver em tabela"
+    com os mesmos números.
+73. **A agregação é feita no app** (`src/lib/dashboard/resumo.ts`), a partir das linhas da
+    view: uma empresa aprova dezenas ou centenas de licitações, não milhares, e assim a regra
+    fica coberta por testes unitários. Há um teto de 10 mil linhas por consulta.
+
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 
 - **Busca** (`/api/search/`): aceita `modalidades=6|8` e `ufs=PR|SC`; devolve

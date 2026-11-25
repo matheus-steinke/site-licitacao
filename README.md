@@ -16,7 +16,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 4 | Coletor do PNCP | Pronta |
 | 5 | Triagem e Oportunidades | Pronta |
 | 6 | Busca | Pronta |
-| 7 | Dashboard | A fazer |
+| 7 | Dashboard | Pronta |
 | 8 | Integrações Google Agenda e Drive | A fazer |
 | 9 | E-mail diário, excluir conta, testes de RLS completos | A fazer |
 | 10 | Opcional: texto do edital para alertas | A fazer |
@@ -139,7 +139,7 @@ Dados por organização (um usuário só enxerga a própria organização):
 | `produtos`, `organizacao_exclusoes` | lê e altera | lê e altera | nada |
 | `produto_arquivos` | lê, inclui e exclui | lê, inclui e exclui | nada |
 | `importacoes` | lê e registra | lê e registra | nada |
-| `oportunidades`, `oportunidade_itens` | lê | lê | nada |
+| `oportunidades`, `oportunidade_itens` (e as views `oportunidades_lista` e `oportunidades_aprovadas`) | lê | lê | nada |
 | `buscas_salvas` | lê, salva e exclui | lê, salva e exclui | nada |
 | Storage `produtos` (arquivos) | só a pasta da própria organização | idem | nada |
 
@@ -446,6 +446,31 @@ acento) na descrição dos itens e no objeto. A função `buscar_licitacoes` rod
 permissões de quem chama: uma empresa nunca vê as oportunidades de outra.
 
 A **busca do catálogo** também deixou de diferenciar acentos: "canula" acha "CÂNULA".
+
+## Dashboard
+
+O Dashboard mostra só as licitações que a empresa **aprovou** em Oportunidades.
+
+- **Licitações disputadas:** aprovadas (ou marcadas como ganha ou perdida) com a data da
+  disputa já passada.
+- **Licitações agendadas:** aprovadas com a disputa ainda por acontecer.
+- **Valor estimado em disputa:** nas agendadas, a soma de quantidade do item × **lance mínimo**
+  do produto vinculado, da tabela de preços da empresa. Só entram os itens "compatível"; os
+  "verificar" ficam de fora. Não é o valor de referência do edital. Como o cálculo é feito na
+  hora, mudar o lance mínimo no Catálogo muda o valor.
+- **Período:** filtra pela data da disputa e vale para os cartões, os gráficos e a lista.
+  Atalhos: últimos 12 meses (padrão, do começo do mês de 11 meses atrás em diante), este mês,
+  este ano e tudo; ou datas livres. A tela escreve o período por extenso.
+- **Gráficos:** licitações por mês da disputa e por estado, com disputadas e agendadas em
+  cores diferentes. Passar o mouse (ou focar com o teclado) mostra os números, e "Ver em
+  tabela" abre os mesmos dados em tabela.
+- **Próximas disputas:** as agendadas do período, da mais próxima para a mais distante, com
+  o valor pelo lance mínimo de cada uma.
+
+Uma agendada que o PNCP mostra como suspensa, revogada ou anulada continua na conta enquanto
+estiver aprovada; a tela avisa quantas são. Para tirá-la, desfaça a aprovação na página da
+licitação. A regra dos números está em [`src/lib/dashboard/resumo.ts`](src/lib/dashboard/resumo.ts)
+e a consulta, na view `oportunidades_aprovadas`.
 
 ## Painel ADMIN
 

@@ -255,8 +255,8 @@ export function DetalheDaLicitacao({ op }: { op: DetalheDaCompra }) {
             Itens do edital
           </h2>
           <p className="mt-2 rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
-            A disputa desta licitação terminou há bastante tempo e ela não foi aprovada, por isso a lista de
-            itens não é mais guardada aqui. O resumo, a sua decisão e os arquivos continuam disponíveis.{" "}
+            A disputa desta licitação terminou há bastante tempo, por isso a lista de itens não é mais guardada
+            aqui. O resumo, a sua decisão e os arquivos continuam disponíveis.{" "}
             {op.linkPncp ? (
               <a href={op.linkPncp} target="_blank" rel="noreferrer" className="font-medium text-foreground underline">
                 Ver a lista completa no PNCP

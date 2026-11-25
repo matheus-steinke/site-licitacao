@@ -1036,6 +1036,28 @@ export type Database = {
       }
     }
     Views: {
+      oportunidades_aprovadas: {
+        Row: {
+          compra_id: string | null
+          data_disputa: string | null
+          decidido_em: string | null
+          exemplo: boolean | null
+          id: string | null
+          itens_a_verificar: number | null
+          itens_compativeis: number | null
+          modalidade_nome: string | null
+          municipio: string | null
+          numero_compra: string | null
+          objeto: string | null
+          org_id: string | null
+          orgao_nome: string | null
+          situacao_id: number | null
+          status: Database["public"]["Enums"]["status_oportunidade"] | null
+          uf: string | null
+          valor_lance_minimo: number | null
+        }
+        Relationships: []
+      }
       oportunidades_lista: {
         Row: {
           alertas: Json | null
