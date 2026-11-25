@@ -3,13 +3,16 @@
 import { refresh } from "next/cache";
 import { z } from "zod";
 
+import { sincronizarAposDecisao } from "@/lib/integracoes/app";
 import { obterOrganizacao } from "@/lib/organizacao";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { triarLote } from "@/lib/triagem/executar";
 
 const SEM_EMPRESA = "Sua sessão expirou ou você não faz parte de uma empresa. Recarregue a página.";
 
-export type ResultadoDaDecisao = { ok: true } | { ok: false; erro: string };
+export type ResultadoDaDecisao =
+  | { ok: true; /** O que aconteceu no Google (evento, pastas), quando há integração. */ integracao?: { texto: string; falhou: boolean } }
+  | { ok: false; erro: string };
 
 const decisao = z.object({
   id: z.uuid(),
@@ -43,8 +46,14 @@ export async function decidirOportunidade(entrada: {
     if (!conhecida) console.error("[oportunidades] decidir:", error.message);
     return { ok: false, erro: conhecida ? error.message : "Não foi possível salvar. Tente de novo em instantes." };
   }
+  // Com o Google conectado: aprovar cria o evento e as pastas; desfazer ou descartar tira o
+  // evento da agenda. Ganha e perdida não mexem em nada. Uma falha aqui não desfaz a decisão.
+  const integracao =
+    dados.data.status === "ganha" || dados.data.status === "perdida"
+      ? null
+      : await sincronizarAposDecisao(atual.org.id, dados.data.id);
   refresh();
-  return { ok: true };
+  return integracao ? { ok: true, integracao } : { ok: true };
 }
 
 export type AndamentoDaTriagem =

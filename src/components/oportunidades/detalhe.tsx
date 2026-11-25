@@ -140,7 +140,7 @@ function Motivos({ item }: { item: ItemCompativel }) {
  * (com os dos segmentos da empresa pintados) e arquivos. Serve à oportunidade e à licitação
  * aberta pela Busca que não é oportunidade (nesse caso, sem ações e sem itens do catálogo).
  */
-export function DetalheDaLicitacao({ op }: { op: DetalheDaCompra }) {
+export function DetalheDaLicitacao({ op, integracoes }: { op: DetalheDaCompra; integracoes?: React.ReactNode }) {
   // Segmentos de interesse da empresa: cada um com a sua cor.
   const segmentos = new Map(op.segmentosDaEmpresa.map((segmento) => [segmento.id, segmento]));
   const comItens = op.segmentosDaEmpresa.filter((segmento) => segmento.itens > 0);
@@ -199,6 +199,8 @@ export function DetalheDaLicitacao({ op }: { op: DetalheDaCompra }) {
           <span className="font-medium">Motivo do descarte:</span> {op.motivoDescarte}
         </p>
       ) : null}
+
+      {integracoes}
 
       <section aria-labelledby="titulo-edital" className="mb-6 rounded-xl border p-4">
         <h2 id="titulo-edital" className="mb-3 font-medium">

@@ -542,6 +542,131 @@ export type Database = {
           },
         ]
       }
+      integracao_vinculos: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          dados: Json
+          erro: string | null
+          id: string
+          id_externo: string | null
+          link: string | null
+          oportunidade_id: string
+          org_id: string
+          provedor: string
+          situacao: string
+          tipo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          dados?: Json
+          erro?: string | null
+          id?: string
+          id_externo?: string | null
+          link?: string | null
+          oportunidade_id: string
+          org_id: string
+          provedor: string
+          situacao?: string
+          tipo: string
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          dados?: Json
+          erro?: string | null
+          id?: string
+          id_externo?: string | null
+          link?: string | null
+          oportunidade_id?: string
+          org_id?: string
+          provedor?: string
+          situacao?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_vinculos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integracao_vinculos_oportunidade_id_org_id_fkey"
+            columns: ["oportunidade_id"]
+            isOneToOne: false
+            referencedRelation: "oportunidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integracoes: {
+        Row: {
+          agenda_ativa: boolean
+          agenda_id: string
+          atualizado_em: string
+          automatico: boolean
+          conectado_em: string
+          conectado_por: string | null
+          conta: string | null
+          credenciais: string
+          drive_ativo: boolean
+          erro: string | null
+          escopos: string[]
+          id: string
+          org_id: string
+          pasta_raiz_id: string | null
+          pasta_raiz_nome: string
+          provedor: string
+        }
+        Insert: {
+          agenda_ativa?: boolean
+          agenda_id?: string
+          atualizado_em?: string
+          automatico?: boolean
+          conectado_em?: string
+          conectado_por?: string | null
+          conta?: string | null
+          credenciais: string
+          drive_ativo?: boolean
+          erro?: string | null
+          escopos?: string[]
+          id?: string
+          org_id: string
+          pasta_raiz_id?: string | null
+          pasta_raiz_nome?: string
+          provedor: string
+        }
+        Update: {
+          agenda_ativa?: boolean
+          agenda_id?: string
+          atualizado_em?: string
+          automatico?: boolean
+          conectado_em?: string
+          conectado_por?: string | null
+          conta?: string | null
+          credenciais?: string
+          drive_ativo?: boolean
+          erro?: string | null
+          escopos?: string[]
+          id?: string
+          org_id?: string
+          pasta_raiz_id?: string | null
+          pasta_raiz_nome?: string
+          provedor?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracoes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       membros: {
         Row: {
           criado_em: string
@@ -1139,6 +1264,23 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["status_oportunidade"]
       }
+      integracao_conectar: {
+        Args: { p_conta: string; p_credenciais: string; p_escopos: string[]; p_org: string; p_provedor: string }
+        Returns: string
+      }
+      integracao_configurar: {
+        Args: {
+          p_agenda_ativa: boolean
+          p_agenda_id: string
+          p_automatico: boolean
+          p_drive_ativo: boolean
+          p_org: string
+          p_pasta_raiz_nome: string
+          p_provedor: string
+        }
+        Returns: undefined
+      }
+      integracao_desconectar: { Args: { p_org: string; p_provedor: string }; Returns: boolean }
       definir_segmentos_organizacao: {
         Args: { p_org: string; p_segmentos: string[] }
         Returns: undefined

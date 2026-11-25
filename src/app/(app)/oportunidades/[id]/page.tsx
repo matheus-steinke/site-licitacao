@@ -5,9 +5,11 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
 
+import { PainelDoGoogle } from "@/components/integracoes/painel-do-google";
 import { DetalheDaLicitacao } from "@/components/oportunidades/detalhe";
 import { EsqueletoDoDetalhe } from "@/components/oportunidades/esqueleto";
 import { obterOportunidade } from "@/lib/dados/oportunidades";
+import { carregarPainelDoGoogle } from "@/lib/integracoes/app";
 import { exigirOrganizacao } from "@/lib/organizacao";
 
 export const metadata: Metadata = { title: "Oportunidade" };
@@ -36,5 +38,11 @@ async function Detalhe({ params }: { params: Promise<{ id: string }> }) {
   if (!id.success) notFound();
   const op = await obterOportunidade(org.id, id.data);
   if (!op) notFound();
-  return <DetalheDaLicitacao op={op} />;
+  const google = await carregarPainelDoGoogle(org.id, id.data, op.arquivos.length);
+  return (
+    <DetalheDaLicitacao
+      op={op}
+      integracoes={<PainelDoGoogle painel={google} oportunidadeId={id.data} status={op.status} />}
+    />
+  );
 }

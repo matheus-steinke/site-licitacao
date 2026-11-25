@@ -17,7 +17,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 5 | Triagem e Oportunidades | Pronta |
 | 6 | Busca | Pronta |
 | 7 | Dashboard | Pronta |
-| 8 | Integrações Google Agenda e Drive | A fazer |
+| 8 | Integrações Google Agenda e Drive | Pronta |
 | 9 | E-mail diário, excluir conta, testes de RLS completos | A fazer |
 | 10 | Opcional: texto do edital para alertas | A fazer |
 
@@ -55,6 +55,8 @@ O app abre em http://localhost:3000.
 | `NEXT_PUBLIC_SUPABASE_URL` | sim | Endereço do projeto Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | sim | Chave pública do Supabase (a segurança vem do RLS) |
 | `NEXT_PUBLIC_SITE_URL` | não | Endereço público do app nos links de e-mail; em branco usa o da requisição |
+| `GOOGLE_CLIENT_ID` | para a integração | ID do cliente OAuth do Google (veja a seção Integrações) |
+| `GOOGLE_CLIENT_SECRET` | para a integração | Chave secreta do cliente OAuth. Segredo: só no servidor (Vercel) e no GitHub Actions |
 
 Nenhum segredo vai para o git: `.env*` está no `.gitignore`, exceto `.env.example`.
 A chave `service_role` do Supabase nunca é usada no app web; ela só entra no coletor (etapa 4),
@@ -71,6 +73,7 @@ como segredo do GitHub Actions.
 | `pnpm test:db` | Aplica migrations e seed num Postgres local descartável e testa as regras de RLS |
 | `pnpm coletor` | Roda uma rodada do coletor do PNCP (veja a seção Coletor) |
 | `pnpm triagem` | Compara as licitações com o catálogo de cada organização (veja a seção Triagem) |
+| `pnpm integracoes` | Sincroniza Google Agenda e Drive de cada organização (veja a seção Integrações) |
 
 `pnpm test:db` precisa de um Postgres 15+ local com as extensões `pg_trgm` e `unaccent`
 e de um usuário com permissão para criar bancos. Ele usa
@@ -141,6 +144,8 @@ Dados por organização (um usuário só enxerga a própria organização):
 | `importacoes` | lê e registra | lê e registra | nada |
 | `oportunidades`, `oportunidade_itens` (e as views `oportunidades_lista` e `oportunidades_aprovadas`) | lê | lê | nada |
 | `buscas_salvas` | lê, salva e exclui | lê, salva e exclui | nada |
+| `integracoes` | lê e registra o estado do uso | conecta, configura e desconecta (por função) | nada |
+| `integracao_vinculos` | lê e grava | lê e grava | nada |
 | Storage `produtos` (arquivos) | só a pasta da própria organização | idem | nada |
 
 Criação de organização e aceite de convite passam por funções do banco
@@ -518,7 +523,8 @@ No painel do Supabase, em **Authentication**:
      `https://SEU-PROJETO.supabase.co/auth/v1/callback`.
    - Copie o Client ID e o Client Secret para o provedor Google no Supabase e ative-o.
    - O login usa só os escopos básicos (e-mail e perfil), que não exigem verificação do
-     Google. Os escopos de Agenda e Drive são pedidos à parte, na etapa 8.
+     Google. Os escopos de Agenda e Drive são pedidos à parte, pela integração (seção
+     Integrações). O mesmo cliente OAuth serve para os dois.
    - Enquanto isso não for feito, o botão "Entrar com Google" mostra um aviso e o login por
      e-mail e senha funciona normalmente.
 
@@ -535,9 +541,110 @@ Cada push no branch de produção publica uma nova versão.
 
 ## Integrações
 
-Google Agenda e Google Drive entram na etapa 8. Esta seção vai explicar a configuração do
-OAuth, a tela de consentimento e o que o Google exige para aprovar os escopos
-`calendar.events` e `drive.file`.
+A área Integrações liga a empresa a serviços externos. O Google (Agenda e Drive) é o único
+provedor implementado. Outlook/Microsoft 365, WhatsApp e webhook aparecem como "em breve": o
+banco e o código já têm o lugar deles (coluna `provedor` e
+[`src/lib/integracoes/provedores.ts`](src/lib/integracoes/provedores.ts)).
+
+### O que a integração com o Google faz
+
+Uma conta do Google por empresa, conectada pelo responsável. Com ela conectada, **ao aprovar
+uma oportunidade** (ou pelo botão "Sincronizar", na página da licitação):
+
+- **Agenda:** cria o evento `PE <nº>/<ano> - <Órgão>` na agenda escolhida, com início na hora
+  da disputa e 1 hora de duração. A descrição traz os itens compatíveis com as quantidades e
+  o produto sugerido, os itens a verificar, os alertas, o link do PNCP e o link da
+  oportunidade. Dispensa sai como `Dispensa <nº>/<ano> - <Órgão>`.
+- **Drive:** dentro de uma pasta principal (nome configurável, padrão "Licitações"), cria
+  `<Mês AAAA>/PE <nº>.<ano> - <Órgão> DD.MM`, com as subpastas `0. Planejamento`,
+  `1. Edital e Anexos`, `2. Habilitação`, `3. Proposta atualizada` e `4. Resultados`, e salva
+  os arquivos do PNCP em `1. Edital e Anexos`.
+
+Regras:
+
+- **Não duplica.** Antes de criar qualquer coisa no Google, o app reserva o vínculo no banco
+  (`integracao_vinculos`, um evento e uma pasta por oportunidade).
+- **Se a data da disputa mudar** (ou os itens, os alertas, a situação), o evento é atualizado.
+  A pasta do Drive não é renomeada nem movida.
+- **Desfazer a aprovação ou descartar** tira o evento da agenda. As pastas ficam, porque
+  podem ter documentos. Marcar como ganha ou perdida não mexe em nada.
+- **Arquivos do edital:** o evento e as pastas aparecem na hora; os arquivos sobem logo
+  depois da resposta. O que não couber no tempo da requisição (ou passar de 25 MB) é enviado
+  pelo coletor, na rodada seguinte. Um arquivo que falha é tentado três vezes.
+- **Acesso revogado:** se o Google recusar o acesso, a integração fica marcada como "Precisa
+  reconectar" e nada mais é tentado até o responsável conectar de novo.
+- **Preferências** (só o responsável): criar automaticamente ao aprovar ou só pelo botão;
+  ligar ou desligar Agenda e Drive; usar outra agenda (pelo ID dela); nome da pasta principal.
+
+Quem faz o quê: o app sincroniza na hora, com a sessão de quem clicou. O coletor
+(`pnpm integracoes`, último passo do workflow, a cada 2 horas) acompanha as mudanças de data
+detectadas no PNCP, tira da agenda o que deixou de estar aprovado e termina os envios
+pendentes, mesmo com o app fechado.
+
+### Configurar (uma vez)
+
+1. **Google Cloud Console** (https://console.cloud.google.com): crie um projeto.
+2. **APIs e serviços > Biblioteca:** ative a *Google Calendar API* e a *Google Drive API*.
+3. **Google Auth Platform** (tela de consentimento):
+   - *Branding:* nome do app, e-mail de suporte e de contato.
+   - *Público-alvo:* Externo. Enquanto estiver em "Teste", cadastre os e-mails que vão usar.
+   - *Acesso a dados:* adicione os escopos `.../auth/calendar.events` e `.../auth/drive.file`.
+4. **Clientes > Criar cliente > Aplicativo da Web**, com estes *URIs de redirecionamento
+   autorizados*:
+   - `https://SEU-APP.vercel.app/integracoes/google/retorno` (a integração)
+   - `https://SEU-PROJETO.supabase.co/auth/v1/callback` (o botão "Entrar com Google")
+   - `http://localhost:3000/integracoes/google/retorno` (opcional, para rodar local)
+5. Cadastre o **ID do cliente** e a **chave secreta** em três lugares:
+
+| Onde | Caminho | O quê |
+|---|---|---|
+| Vercel | Settings > Environment Variables | `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`; depois, um novo deploy |
+| GitHub | Settings > Secrets and variables > Actions | Variable `GOOGLE_CLIENT_ID` e Secret `GOOGLE_CLIENT_SECRET` (opcional: Variable `SITE_URL` com o endereço do app, para o link nos eventos atualizados pelo coletor) |
+| Supabase | Authentication > Sign In / Providers > Google | ID e chave secreta (login com Google) |
+
+A chave secreta nunca vai para o código nem para variável `NEXT_PUBLIC_`. Sem as variáveis
+na Vercel, a página Integrações avisa que falta configurar; sem elas no GitHub, o passo do
+coletor só registra que não há nada a fazer.
+
+### Segurança
+
+- **Menor escopo possível.** `calendar.events` cria e altera eventos; não dá acesso a
+  configurações nem à lista de agendas (por isso a outra agenda é informada pelo ID).
+  `drive.file` só enxerga arquivos e pastas que o próprio app criou.
+- **Token cifrado.** O token de atualização é cifrado (AES-256-GCM) antes de ir para o banco,
+  com uma chave derivada de `GOOGLE_CLIENT_SECRET`. Quem lê a tabela vê só o texto cifrado.
+  Consequência: se a chave secreta do cliente for trocada no Google, cada empresa precisa
+  conectar de novo.
+- **Só o responsável** conecta, configura e desconecta (funções `integracao_conectar`,
+  `integracao_configurar` e `integracao_desconectar`). Desconectar apaga o token e pede ao
+  Google para invalidá-lo; os eventos e as pastas já criados continuam na conta.
+- **Volta do Google conferida** por um código de uso único guardado em cookie (10 minutos),
+  para a conexão só valer no navegador e na empresa que a pediram.
+- O app só baixa arquivos de endereços do próprio PNCP.
+
+### O que o Google exige para aprovar o app
+
+Enquanto a tela de consentimento estiver em **"Teste"**:
+
+- só entram os e-mails cadastrados como usuários de teste (até 100);
+- **o acesso expira em 7 dias**: depois disso a integração passa a "Precisa reconectar".
+  Serve para testar, não para o uso do dia a dia.
+
+Para uso real, publique o app (**"Em produção"**). A partir daí:
+
+- `drive.file` é um escopo comum (não sensível) e não exige verificação.
+- `calendar.events` é um escopo **sensível**. Sem verificação, o Google mostra a tela "O
+  Google não verificou este app" (o usuário clica em Avançado para continuar) e limita o app
+  a 100 usuários. O acesso deixa de expirar em 7 dias.
+- Para tirar o aviso e o limite, peça a **verificação**. O Google costuma exigir: domínio
+  próprio verificado no Search Console (um endereço `*.vercel.app` não serve), página inicial
+  e Política de Privacidade publicadas nesse domínio, logotipo, a justificativa de uso de cada
+  escopo e um vídeo curto mostrando a tela de consentimento e o uso da Agenda. A análise
+  leva de alguns dias a algumas semanas. Não há auditoria de segurança paga, que só vale
+  para escopos restritos (não é o caso).
+
+As regras mudam: confira a página oficial antes de pedir a verificação
+(https://support.google.com/cloud/answer/9110914).
 
 ## Estrutura
 

@@ -36,6 +36,8 @@ export function AcoesDaOportunidade({ id, status, encerrada }: Props) {
       const r = await decidirOportunidade({ id, status: novo, motivo: motivoDoDescarte });
       if (r.ok) {
         toast.success(mensagem);
+        if (r.integracao?.falhou) toast.error(r.integracao.texto, { duration: 10_000 });
+        else if (r.integracao) toast.message(r.integracao.texto);
         setDescartando(false);
         setMotivo("");
       } else toast.error(r.erro);

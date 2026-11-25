@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:db": "./scripts/testar-banco.sh",
     "coletor": "tsx coletor/index.ts",
-    "triagem": "tsx coletor/triagem.ts"
+    "triagem": "tsx coletor/triagem.ts",
+    "integracoes": "tsx coletor/integracoes.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

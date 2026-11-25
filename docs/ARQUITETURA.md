@@ -358,6 +358,45 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     como "Excluída do PNCP" nas telas, entra no histórico de alterações e deixa de ser
     conferida. A resposta 410 não conta como erro da rodada.
 
+## Decisões tomadas na etapa 8
+
+77. **Uma conta do Google por empresa**, conectada pelo responsável e usada nas aprovações de
+    qualquer membro (tabela `integracoes`, uma linha por provedor). OAuth próprio da
+    integração, separado do "Entrar com Google" do Supabase; o mesmo cliente OAuth serve aos
+    dois.
+78. **Sem SDK do Google:** chamadas REST diretas (token, eventos da Agenda, arquivos do
+    Drive), que rodam igual na Vercel e no GitHub Actions e são testadas com um Google falso.
+79. **Token cifrado com chave derivada do segredo do cliente OAuth** (AES-256-GCM, HKDF).
+    Evita mais um segredo para cadastrar em dois lugares; o token já seria inútil sem o
+    segredo do cliente. Custo: trocar o segredo no Google obriga a reconectar.
+80. **Quem escreve o quê:** conectar, configurar e desconectar são funções do banco, só para
+    o dono. O membro lê a integração (o app precisa do token cifrado para agir quando ele
+    aprova) e só atualiza o estado do uso (`pasta_raiz_id`, `erro`). Os vínculos
+    (`integracao_vinculos`) são gravados pelo app com a sessão do membro.
+81. **Reservar antes de criar.** O vínculo entra no banco como "pendente" (único por
+    oportunidade, provedor e tipo) antes da chamada ao Google; é isso que impede duplicar.
+    Uma reserva sem resultado há mais de 90 segundos é retomada.
+82. **O evento acompanha a licitação por uma assinatura do conteúdo** (data, itens, alertas,
+    situação): mudou, atualiza. A especificação pede a atualização quando a data muda; o
+    resto vem junto. Se o evento foi apagado da agenda, é recriado na atualização.
+83. **Sair de "aprovada" remove o evento** (desfazer ou descartar), para a agenda não ficar
+    com disputa que a empresa desistiu. As pastas ficam. A especificação não trata do caso.
+84. **A pasta do Drive não é renomeada nem movida quando a data muda** (o nome leva o dia e o
+    mês, e ela fica na pasta do mês original): o cliente pode já ter organizado os arquivos.
+85. **Título do evento e nome da pasta:** "PE" para pregão, como na especificação;
+    "Dispensa" para dispensa eletrônica. Quando o número do PNCP já traz o ano ("0975/26"),
+    ele não é repetido.
+86. **Sincronização em dois lugares, com o mesmo código** (`src/lib/integracoes/sincronizar.ts`):
+    no app, na hora, com a sessão do usuário (evento e pastas dentro da requisição; arquivos
+    do edital depois da resposta, por até 45 segundos, com limite de 25 MB por arquivo); e
+    no coletor (`pnpm integracoes`), a cada rodada, com a chave de serviço, para acompanhar as
+    mudanças de data detectadas no PNCP e terminar os envios (limite de 150 MB por arquivo).
+    Por isso as credenciais do Google ficam também no GitHub Actions.
+87. **Acesso revogado para de insistir:** a integração guarda o erro, o coletor a ignora e a
+    tela pede para conectar de novo. O botão "Sincronizar" tenta e, se der certo, limpa o erro.
+88. **Agenda escolhida pelo ID** (decisão 5): em branco, a principal. O evento guarda em qual
+    agenda foi criado; trocar a agenda nas preferências vale para os próximos.
+
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 
 - **Busca** (`/api/search/`): aceita `modalidades=6|8` e `ufs=PR|SC`; devolve

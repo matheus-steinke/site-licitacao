@@ -4,6 +4,9 @@ name: Coletor do PNCP
 # Configuração (uma vez), em Settings > Secrets and variables > Actions:
 #   - Secret   SUPABASE_SERVICE_ROLE_KEY: chave "service_role"/"secret" do Supabase
 #   - Variable SUPABASE_URL: https://SEU-PROJETO.supabase.co
+#   - Variable GOOGLE_CLIENT_ID e Secret GOOGLE_CLIENT_SECRET (opcionais): as mesmas credenciais do
+#     Google cadastradas na Vercel. Com elas, o evento da agenda acompanha a data da disputa.
+#   - Variable SITE_URL (opcional): endereço público do app, para o link nos eventos.
 #   - Variable COLETOR_DIAS_DE_RETENCAO (opcional): depois de quantos dias da disputa os itens das
 #     licitações não aprovadas são apagados. Em branco = 30; 0 = nunca apagar.
 
@@ -76,3 +79,17 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm triagem
+
+      # Google Agenda e Drive: atualiza o evento quando a data da disputa muda, tira da agenda o
+      # que deixou de estar aprovado e termina o envio dos arquivos do edital. Sem as credenciais
+      # do Google, o passo só avisa e termina.
+      - name: Integrações (Google Agenda e Drive)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: pnpm integracoes
