@@ -6,8 +6,9 @@ import { after } from "next/server";
 import { criarClienteServidor } from "@/lib/supabase/server";
 
 import { criarArmazenamento } from "./armazenamento";
-import { credenciaisDoGoogle, criarDependencias } from "./configuracao";
-import { ESCOPO_AGENDA, ESCOPO_DRIVE } from "./google/oauth";
+import { decifrar } from "./cifra";
+import { credenciaisDoGoogle, criarDependencias, segredoDaCifra } from "./configuracao";
+import { ESCOPO_AGENDA, ESCOPO_DRIVE, revogar } from "./google/oauth";
 import {
   sincronizarOportunidade,
   type ArquivoNoDrive,
@@ -41,6 +42,33 @@ async function dependencias() {
     linkDoApp: (oportunidadeId) => `${origem}/oportunidades/${oportunidadeId}`,
     limiteDoArquivoBytes: LIMITE_DO_ARQUIVO_NO_APP,
   });
+}
+
+/**
+ * Para a exclusão da conta: lê o acesso ao Google antes de a empresa ser apagada e devolve a
+ * função que pede ao Google para invalidá-lo. Eventos e pastas já criados ficam na conta do
+ * Google do cliente. Nunca lança erro.
+ */
+export async function prepararRevogacaoDoGoogle(orgId: string): Promise<() => Promise<void>> {
+  const nada = async () => {};
+  try {
+    const app = credenciaisDoGoogle();
+    if (!app) return nada;
+    const supabase = await criarClienteServidor();
+    const { data } = await supabase.from("integracoes").select("credenciais").eq("org_id", orgId).eq("provedor", "google").maybeSingle();
+    if (!data) return nada;
+    const token = decifrar(data.credenciais, segredoDaCifra(app));
+    return async () => {
+      try {
+        await revogar(token);
+      } catch (erro) {
+        console.error("[integracoes] revogar ao excluir a conta:", erro instanceof Error ? erro.message : erro);
+      }
+    };
+  } catch {
+    // Credenciais ilegíveis: não há o que revogar.
+    return nada;
+  }
 }
 
 /** Frase curta para o aviso na tela, ou null se não houve nada a dizer. */

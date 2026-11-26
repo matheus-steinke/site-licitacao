@@ -1,0 +1,66 @@
+name: E-mail diário
+
+# Envia, para cada empresa, o e-mail com as oportunidades novas, na hora que ela escolheu em
+# Configurações > Notificações (horário de Brasília). Roda de hora em hora; o registro no banco
+# garante um envio por empresa por dia, e dia sem oportunidade nova não gera e-mail.
+# Configuração (uma vez), em Settings > Secrets and variables > Actions:
+#   - Secret   RESEND_API_KEY: chave da API do Resend (a mesma cadastrada na Vercel).
+#     Sem ela, o passo só avisa e termina.
+#   - Variable EMAIL_REMETENTE (opcional): "Nome <avisos@seu-dominio.com.br>", de um domínio
+#     verificado no Resend. Em branco, usa o remetente de testes do Resend, que só entrega para
+#     o e-mail da própria conta do Resend.
+#   - Variable SITE_URL (opcional): endereço público do app, para os links do e-mail.
+#   - Secret SUPABASE_SERVICE_ROLE_KEY e Variable SUPABASE_URL: os mesmos do coletor.
+
+on:
+  schedule:
+    # Toda hora, no minuto 7 (horário UTC), para fugir do pico da hora cheia.
+    - cron: "7 * * * *"
+  workflow_dispatch:
+    inputs:
+      agora:
+        description: "Ignorar a hora escolhida pelas empresas (continua um envio por dia)"
+        type: boolean
+        default: false
+      simular:
+        description: "Só dizer o que seria enviado, sem enviar nem gravar"
+        type: boolean
+        default: false
+
+concurrency:
+  group: email-diario
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Enviar o e-mail diário
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_REMETENTE: ${{ vars.EMAIL_REMETENTE }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://site-licitacao.vercel.app' }}
+          AGORA: ${{ inputs.agora }}
+          SIMULAR: ${{ inputs.simular }}
+        run: |
+          argumentos=()
+          if [ "$AGORA" = "true" ]; then argumentos+=(--agora); fi
+          if [ "$SIMULAR" = "true" ]; then argumentos+=(--simular); fi
+          pnpm email-diario "${argumentos[@]}"

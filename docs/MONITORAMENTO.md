@@ -9,6 +9,9 @@ Brasil).
 Este documento separa o que foi **conferido na fonte** do que ainda é **hipótese**. Nada aqui
 foi implementado.
 
+**Situação:** plano aprovado pelo dono do projeto em 26/11/2026, com a etapa 9 (e-mail) feita
+antes. A etapa 11 começa pela validação (11.0).
+
 ## Resumo
 
 - **Compras.gov.br tem API oficial para o chat desde julho de 2026:** o Integra Compras, do
@@ -197,6 +200,8 @@ Se o atraso passar de 1 minuto ou a cobrança for por consulta, o plano volta pa
 Responder no chat, enviar documentos e dar lances continuam fora do MVP.
 
 ## Decisões que cabem ao dono do projeto
+
+As três foram aprovadas em 26/11/2026.
 
 1. Aprovar o caminho da API oficial para o Compras.gov (e contratar com o e-CNPJ).
 2. Licitações-e: aceitar começar pelo protótipo de extensão, sabendo que o Compras.gov sai

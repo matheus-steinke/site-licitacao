@@ -47,7 +47,7 @@ Leitura para qualquer usuário logado; escrita só pelo coletor (service role) o
 | Tabela | Conteúdo | Relações |
 |---|---|---|
 | `organizacoes` | razão social, CNPJ, porte, plano, UFs, limites do score, controle da triagem (configuração, marca, versão do motor), e-mail diário (ligado, hora) | — |
-| `membros`, `convites` | usuário, papel (dono ou membro); convites por e-mail | → `organizacoes`, usuário |
+| `membros`, `convites` | usuário, papel (dono ou membro), preferência de receber o e-mail diário; convites por e-mail | → `organizacoes`, usuário |
 | `organizacao_segmentos` | segmentos de interesse | → `segmentos` |
 | `organizacao_exclusoes` | termos que a empresa não fornece (opcionalmente por segmento) | → `segmentos` |
 | `produtos` | ID do cliente (único na organização), referência, produto, preço proposta, lance mínimo e colunas opcionais | → `segmentos` |
@@ -58,7 +58,7 @@ Leitura para qualquer usuário logado; escrita só pelo coletor (service role) o
 | `buscas_salvas` | nome e filtros (palavra-chave, estados, segmentos, período, modalidade, situação, só catálogo); da organização | — |
 | `integracoes` | provedor, conta, credenciais cifradas, agenda e pasta-raiz | — |
 | `integracao_vinculos` | ID do evento ou da pasta já criados, para não duplicar e poder atualizar | → `oportunidades` |
-| `email_envios` | registro do e-mail diário | — |
+| `email_envios` | registro do e-mail diário: um por empresa e por dia, com o resultado | — |
 
 As tabelas são criadas na etapa que as usa, não todas de uma vez.
 
@@ -86,9 +86,9 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 | 6 | Busca e buscas salvas | Pesquisar e salvar filtros |
 | 7 | Dashboard | Conferir cartões e valor estimado |
 | 8 | Integrações Google Agenda e Drive | Aprovar e ver evento e pastas criados |
-| 9 | E-mail diário, excluir conta, testes de RLS, README final | Receber o e-mail; revisão geral |
+| 9 | E-mail diário, convite por e-mail, excluir conta, testes de RLS, README final | Receber o e-mail; revisão geral |
 | 10 | Opcional: texto do edital (`pdftotext`) para alertas | Alertas de amostra, comodato, visita técnica |
-| 11 | Monitoramento das licitações (Compras.gov.br e Licitações-e), incluído em 26/11/2026. Estudo e plano em [`MONITORAMENTO.md`](MONITORAMENTO.md); começa por uma validação, antes de construir | Receber o aviso de uma mensagem do pregoeiro em segundos |
+| 11 | Monitoramento das licitações (Compras.gov.br e Licitações-e), incluído em 26/11/2026. Estudo e plano em [`MONITORAMENTO.md`](MONITORAMENTO.md), aprovados pelo dono do projeto em 26/11/2026; começa por uma validação, antes de construir | Receber o aviso de uma mensagem do pregoeiro em segundos |
 
 ## Decisões aprovadas
 
@@ -109,7 +109,7 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 10. **Papéis:** `dono` (responsável, quem criou a organização) e `membro`. Só o dono altera
     dados da empresa, estados, segmentos e usuários.
 11. **Convites por link:** o convite fica vinculado ao e-mail; quem entra com esse e-mail,
-    já confirmado, pode aceitar. O envio automático por e-mail entra na etapa 9 (Resend).
+    já confirmado, pode aceitar. Desde a etapa 9 o convite também vai por e-mail (decisão 95).
 12. **CNPJ único:** cada CNPJ pertence a uma organização. Quem tentar cadastrar um CNPJ já
     usado é orientado a pedir convite ao responsável.
 13. **Nome e e-mail do membro** são copiados para `membros` na entrada, porque `auth.users`
@@ -400,6 +400,46 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     tela pede para conectar de novo. O botão "Sincronizar" tenta e, se der certo, limpa o erro.
 88. **Agenda escolhida pelo ID** (decisão 5): em branco, a principal. O evento guarda em qual
     agenda foi criado; trocar a agenda nas preferências vale para os próximos.
+
+## Decisões tomadas na etapa 9
+
+89. **Agendador do e-mail diário: um workflow próprio no GitHub Actions, de hora em hora**
+    (`email-diario.yml`, minuto 7), separado do coletor (que roda a cada 2 horas e pode levar
+    meia hora). A hora é da empresa, no horário de Brasília; o envio sai na primeira execução
+    depois dela. A chave de serviço continua só no GitHub: o app web não lê dados de outras
+    empresas. A Vercel gratuita só agenda uma vez por dia, por isso não serve aqui.
+90. **O que entra no e-mail:** oportunidades novas (status "nova", prioridade de 1 a 3, ainda
+    por disputar, fora as revogadas, anuladas e excluídas) criadas desde o último e-mail.
+    Primeiro e-mail: últimas 24 horas. Depois de dias sem envio: no máximo 72 horas, para não
+    despejar um mês de uma vez. Até 15 no corpo; o resto fica no link da lista.
+91. **Dia sem oportunidade nova não gera e-mail** (registro "vazio"). Escolha do Claude, a
+    confirmar com o dono do projeto: e-mail vazio todo dia ensina a pessoa a ignorar o aviso.
+92. **Um registro por empresa e por dia, criado antes de enviar** (`email_envios`, único por
+    empresa, tipo e dia). O `criado_em` dele, no relógio do banco, fecha a janela: o que
+    chegar depois fica para o dia seguinte e uma nova tentativa usa a mesma janela. Enquanto
+    não termina, o registro fica como "erro" ("O envio não foi concluído."), e o agendador
+    tenta de novo na hora seguinte. A chave de idempotência do Resend
+    (`diario/{empresa}/{dia}/{pessoa}`) evita que alguém receba duas vezes.
+93. **Duas chaves de liga e desliga:** a empresa (responsável) liga ou desliga e escolhe a hora;
+    cada pessoa escolhe se recebe (`membros.recebe_email_diario`, a única coluna de `membros`
+    que o próprio usuário altera). Um e-mail por pessoa, sem expor os endereços dos colegas.
+94. **Resend por REST, sem SDK,** como no Google: o mesmo código roda na Vercel (convite e
+    e-mail de teste) e no GitHub Actions (e-mail diário) e é testado com um Resend falso. Sem
+    `RESEND_API_KEY` o app funciona e avisa. Sem domínio verificado, o Resend só entrega para
+    o e-mail da própria conta: o app traduz esse erro e mantém o link do convite para copiar.
+95. **O convite por e-mail não substitui o link:** o convite é criado primeiro e o link
+    continua na tela; o e-mail é um acréscimo que pode falhar sem perder o convite.
+96. **E-mail de teste** pelo botão em Notificações: usa a sessão de quem clicou (RLS), vai só
+    para essa pessoa e não mexe no registro do dia.
+97. **Excluir a conta é uma função do banco** (`excluir_conta`, com a confirmação "EXCLUIR"):
+    o responsável leva a empresa junto, em cascata; o membro só sai. O app apaga antes os
+    arquivos do Storage (pela lista do banco e pela pasta da empresa) e, depois, pede ao Google
+    para invalidar o acesso. As outras pessoas da empresa ficam com o login, sem empresa.
+    Transferir a empresa para outro responsável fica como ponto de extensão.
+98. **Teste de cobertura do RLS** (`rls_z_cobertura.sql`): em vez de depender de lembrar de
+    cada tabela, confere a estrutura inteira (RLS ligado, regras existentes, visitante sem
+    permissão, views com `security_invoker`, funções com `search_path` fixo, regras por
+    `org_id`). As mesmas consultas foram rodadas na produção em 26/11/2026, sem achados.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

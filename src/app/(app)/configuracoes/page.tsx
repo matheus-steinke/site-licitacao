@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import { Clock, Lock, Trash2, UserRound } from "lucide-react";
+import { Clock, Lock, MailWarning, Trash2, UserRound } from "lucide-react";
 
 import { CabecalhoPagina } from "@/components/app/cabecalho-pagina";
+import { ExcluirConta } from "@/components/configuracoes/excluir-conta";
+import { BotaoEmailDeTeste, FormularioNotificacoes } from "@/components/configuracoes/notificacoes";
 import { BotaoEnviar } from "@/components/formulario/botao-enviar";
 import { FormularioAcao } from "@/components/formulario/formulario-acao";
 import { CamposEmpresa } from "@/components/organizacao/campos-empresa";
@@ -12,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatarData } from "@/lib/formato";
+import { emailConfigurado } from "@/lib/email/app";
+import { formatarData, formatarDataHora } from "@/lib/formato";
 import {
   exigirOrganizacao,
   listarSegmentosAtivos,
@@ -123,6 +126,77 @@ async function Usuarios({
       ) : null}
     </div>
   );
+}
+
+type UltimoEnvio = { status: string; destinatarios: number; oportunidades: number; erro: string | null; atualizado_em: string };
+
+function descreverUltimoEnvio(envio: UltimoEnvio | null): string {
+  if (!envio) return "Nenhum e-mail diário foi enviado ainda.";
+  const quando = formatarDataHora(envio.atualizado_em);
+  if (envio.status === "enviado") {
+    const oportunidades = envio.oportunidades === 1 ? "1 oportunidade nova" : `${envio.oportunidades} oportunidades novas`;
+    const pessoas = envio.destinatarios === 1 ? "1 pessoa" : `${envio.destinatarios} pessoas`;
+    return `Último envio: ${quando}, com ${oportunidades}, para ${pessoas}.`;
+  }
+  if (envio.status === "vazio") return `Última verificação: ${quando}. Não havia oportunidade nova, então nada foi enviado.`;
+  return `A última tentativa de envio (${quando}) falhou. ${envio.erro ?? ""} O sistema tenta de novo na hora seguinte.`;
+}
+
+async function Notificacoes({
+  orgId,
+  usuarioId,
+  ehDono,
+  ligado,
+  hora,
+}: {
+  orgId: string;
+  usuarioId: string;
+  ehDono: boolean;
+  ligado: boolean;
+  hora: number;
+}) {
+  const supabase = await criarClienteServidor();
+  const [{ data: eu }, { data: envio }] = await Promise.all([
+    supabase.from("membros").select("recebe_email_diario").eq("org_id", orgId).eq("user_id", usuarioId).maybeSingle(),
+    supabase
+      .from("email_envios")
+      .select("status, destinatarios, oportunidades, erro, atualizado_em")
+      .eq("org_id", orgId)
+      .eq("tipo", "diario")
+      .order("dia", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const configurado = emailConfigurado();
+
+  return (
+    <div className="flex flex-col gap-5">
+      {configurado ? null : (
+        <Alert>
+          <MailWarning aria-hidden />
+          <AlertDescription>
+            O envio de e-mails ainda não foi configurado neste servidor (falta a chave do Resend). As
+            preferências abaixo ficam salvas e passam a valer quando ele for configurado.
+          </AlertDescription>
+        </Alert>
+      )}
+      <FormularioNotificacoes ehDono={ehDono} ligado={ligado} hora={hora} receber={eu?.recebe_email_diario ?? true} />
+      <div className="flex flex-col gap-3 border-t pt-4">
+        <p className="text-sm text-muted-foreground">{descreverUltimoEnvio(envio)}</p>
+        {configurado ? (
+          <div>
+            <BotaoEmailDeTeste />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+async function CartaoExcluirConta({ orgId, empresa, ehDono }: { orgId: string; empresa: string; ehDono: boolean }) {
+  const supabase = await criarClienteServidor();
+  const { count } = await supabase.from("membros").select("user_id", { count: "exact", head: true }).eq("org_id", orgId);
+  return <ExcluirConta ehDono={ehDono} empresa={empresa} outrasPessoas={Math.max(0, (count ?? 1) - 1)} />;
 }
 
 export default async function PaginaConfiguracoes() {
@@ -264,9 +338,33 @@ export default async function PaginaConfiguracoes() {
           </CardContent>
         </Card>
 
-        <p className="text-sm text-muted-foreground">
-          Ainda por vir nesta tela: e-mail diário e exclusão da conta (etapa 9).
-        </p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Notificações</CardTitle>
+            <CardDescription>O e-mail diário com as oportunidades novas da empresa.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Notificacoes
+              orgId={org.id}
+              usuarioId={usuario.id}
+              ehDono={ehDono}
+              ligado={org.email_diario}
+              hora={org.email_diario_hora}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Excluir conta</CardTitle>
+            <CardDescription>
+              Você pode apagar os seus dados deste app a qualquer momento (Lei Geral de Proteção de Dados).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CartaoExcluirConta orgId={org.id} empresa={org.razao_social} ehDono={ehDono} />
+          </CardContent>
+        </Card>
       </div>
     </>
   );

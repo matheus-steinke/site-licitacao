@@ -18,9 +18,9 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 6 | Busca | Pronta |
 | 7 | Dashboard | Pronta |
 | 8 | Integrações Google Agenda e Drive | Pronta |
-| 9 | E-mail diário, excluir conta, testes de RLS completos | A fazer |
+| 9 | E-mail diário, convite por e-mail, excluir conta, testes de RLS completos | Pronta |
 | 10 | Opcional: texto do edital para alertas | A fazer |
-| 11 | Monitoramento das licitações (chat do pregão, convocações, resultado) | Em estudo: [`docs/MONITORAMENTO.md`](docs/MONITORAMENTO.md) |
+| 11 | Monitoramento das licitações (chat do pregão, convocações, resultado) | Plano aprovado em 26/11/2026; começa pela validação: [`docs/MONITORAMENTO.md`](docs/MONITORAMENTO.md) |
 
 ## Stack
 
@@ -58,6 +58,9 @@ O app abre em http://localhost:3000.
 | `NEXT_PUBLIC_SITE_URL` | não | Endereço público do app nos links de e-mail; em branco usa o da requisição |
 | `GOOGLE_CLIENT_ID` | para a integração | ID do cliente OAuth do Google (veja a seção Integrações) |
 | `GOOGLE_CLIENT_SECRET` | para a integração | Chave secreta do cliente OAuth. Segredo: só no servidor (Vercel) e no GitHub Actions |
+| `RESEND_API_KEY` | para os e-mails | Chave da API do Resend (veja a seção E-mails). Segredo: só no servidor (Vercel) e no GitHub Actions |
+| `EMAIL_REMETENTE` | não | Remetente dos e-mails, de um domínio verificado no Resend: `Nome <avisos@seu-dominio.com.br>` |
+| `SITE_URL` | só no agendador | Endereço público do app nos links do e-mail diário e dos eventos da agenda |
 
 Nenhum segredo vai para o git: `.env*` está no `.gitignore`, exceto `.env.example`.
 A chave `service_role` do Supabase nunca é usada no app web; ela só entra no coletor (etapa 4),
@@ -75,6 +78,7 @@ como segredo do GitHub Actions.
 | `pnpm coletor` | Roda uma rodada do coletor do PNCP (veja a seção Coletor) |
 | `pnpm triagem` | Compara as licitações com o catálogo de cada organização (veja a seção Triagem) |
 | `pnpm integracoes` | Sincroniza Google Agenda e Drive de cada organização (veja a seção Integrações) |
+| `pnpm email-diario` | Envia o e-mail diário das empresas que estão na hora (veja a seção E-mails) |
 
 `pnpm test:db` precisa de um Postgres 15+ local com as extensões `pg_trgm` e `unaccent`
 e de um usuário com permissão para criar bancos. Ele usa
@@ -137,7 +141,7 @@ Dados por organização (um usuário só enxerga a própria organização):
 | Tabela | Membro | Responsável (dono) | Admin da plataforma |
 |---|---|---|---|
 | `organizacoes` | lê | lê e altera (menos o `plano`) | lê todas |
-| `membros` | lê | lê e remove outros membros | lê todos |
+| `membros` | lê; altera só a própria preferência de e-mail | idem, e remove outros membros | lê todos |
 | `convites` | nada | lê, cria e cancela | nada |
 | `organizacao_segmentos` | lê | lê e altera | lê todos |
 | `produtos`, `organizacao_exclusoes` | lê e altera | lê e altera | nada |
@@ -147,6 +151,7 @@ Dados por organização (um usuário só enxerga a própria organização):
 | `buscas_salvas` | lê, salva e exclui | lê, salva e exclui | nada |
 | `integracoes` | lê e registra o estado do uso | conecta, configura e desconecta (por função) | nada |
 | `integracao_vinculos` | lê e grava | lê e grava | nada |
+| `email_envios` | lê | lê | nada |
 | Storage `produtos` (arquivos) | só a pasta da própria organização | idem | nada |
 
 Criação de organização e aceite de convite passam por funções do banco
@@ -157,6 +162,15 @@ As oportunidades também só mudam por função do banco: `triagem_gravar` (o re
 triagem, chamado pelo coletor ou por um membro da organização) e `decidir_oportunidade`
 (aprovar, descartar, reabrir, ganha/perdida). Um membro só tria e decide na própria organização.
 
+A exclusão da conta também é uma função do banco (`excluir_conta`), que só age sobre quem está
+logado. O registro dos e-mails (`email_envios`) só é gravado pelo agendador.
+
+Além dos testes de cada tabela, [`supabase/tests/rls_z_cobertura.sql`](supabase/tests/rls_z_cobertura.sql)
+confere a estrutura inteira, para uma tabela nova não entrar sem proteção: toda tabela tem RLS
+ligado e pelo menos uma regra, o visitante não tem permissão em nenhuma tabela nem executa
+nenhuma função, as views respeitam as regras de quem consulta, as funções com privilégio fixam
+o `search_path` e toda regra de tabela com `org_id` confere o usuário.
+
 ## Organizações e usuários
 
 - No primeiro acesso o usuário passa pelo onboarding: empresa, estados, segmentos e tabela de
@@ -164,10 +178,10 @@ triagem, chamado pelo coletor ou por um membro da organização) e `decidir_opor
 - Neste MVP cada usuário pertence a uma única organização, e cada CNPJ a uma única
   organização. O CNPJ é validado pelos dígitos verificadores, inclusive no formato
   alfanumérico.
-- **Convites:** em Configurações > Usuários, o responsável informa o e-mail da pessoa e o app
-  gera um link de cadastro com esse e-mail. O responsável envia o link (o envio automático
-  por e-mail entra na etapa 9, junto com o Resend). Quem entrar com aquele e-mail, já
-  confirmado, vê o convite e aceita. Convites valem 14 dias.
+- **Convites:** em Configurações > Usuários, o responsável informa o e-mail da pessoa. O app
+  envia o convite por e-mail (seção E-mails) e também mostra o link de cadastro, para copiar
+  se o e-mail não chegar ou se o envio não estiver configurado. Quem entrar com aquele
+  e-mail, já confirmado, vê o convite e aceita. Convites valem 14 dias.
 - Só o responsável altera dados da empresa, estados, segmentos e usuários. Os membros
   consultam.
 
@@ -509,8 +523,8 @@ No painel do Supabase, em **Authentication**:
 2. **E-mails de confirmação**
    - O servidor de e-mail padrão do Supabase só envia para os endereços dos membros da
      organização no Supabase e tem limite baixo por hora. Para testar com outros e-mails,
-     configure um SMTP próprio (o Resend entra na etapa 9) ou desligue temporariamente
-     *Confirm email* em Sign In / Providers > Email.
+     configure um SMTP próprio (o do Resend serve: veja a seção E-mails) ou desligue
+     temporariamente *Confirm email* em Sign In / Providers > Email.
    - Recomendado: em Email Templates, troque o link de "Confirm signup" por
      `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email` e o de
      "Reset password" por
@@ -533,7 +547,9 @@ No painel do Supabase, em **Authentication**:
 
 1. Importe o repositório do GitHub na Vercel (framework Next.js, detectado sozinho).
 2. Em Settings > Environment Variables, cadastre `NEXT_PUBLIC_SUPABASE_URL` e
-   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` para Production e Preview.
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` para Production e Preview. Para as integrações e os
+   e-mails, cadastre também `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `RESEND_API_KEY`
+   (seções Integrações e E-mails). Variável nova só vale depois de um novo deploy.
 3. Faça o deploy. A região das funções é São Paulo (`gru1`, definida em `vercel.json`),
    a mesma do banco.
 4. Coloque o endereço gerado em *Site URL* e *Redirect URLs* no Supabase (seção acima).
@@ -647,6 +663,93 @@ Para uso real, publique o app (**"Em produção"**). A partir daí:
 As regras mudam: confira a página oficial antes de pedir a verificação
 (https://support.google.com/cloud/answer/9110914).
 
+## E-mails
+
+O app envia dois e-mails, pelo [Resend](https://resend.com):
+
+- **Convite:** quando o responsável convida alguém em Configurações > Usuários.
+- **E-mail diário:** as licitações novas da empresa, uma vez por dia.
+
+Confirmação de cadastro e troca de senha são e-mails do Supabase, não passam por aqui (veja
+"SMTP do Supabase", abaixo).
+
+### O e-mail diário
+
+- Cada empresa escolhe a hora em Configurações > Notificações (horário de Brasília; padrão
+  7h) e pode desligar. Cada pessoa também pode deixar de receber, sem afetar os colegas.
+- Entram as oportunidades **novas desde o último e-mail**: licitações dos estados e segmentos
+  da empresa que ainda não foram decididas e ainda vão ser disputadas. As que têm item do
+  catálogo vêm primeiro; dentro de cada grupo, a disputa mais próxima. O e-mail lista até 15
+  e diz quantas mais há na lista completa.
+- **Dia sem oportunidade nova não gera e-mail.**
+- Licitação revogada, anulada ou excluída do PNCP não entra.
+- No primeiro e-mail de uma empresa entram as últimas 24 horas. Depois de dias sem envio
+  (falha, ou e-mail desligado e religado), o e-mail volta no máximo 72 horas.
+- Um envio por empresa por dia: a tabela `email_envios` guarda o resultado ("enviado",
+  "vazio" ou "erro"), que aparece em Configurações > Notificações. Se o envio falhar, o
+  agendador tenta de novo na hora seguinte, com as mesmas oportunidades; quem já recebeu não
+  recebe de novo.
+- O botão **Enviar um e-mail de teste para mim**, na mesma tela, manda na hora um e-mail com
+  as oportunidades novas do momento, só para quem clicou. Não conta como o envio do dia.
+
+Quem envia é o workflow [`.github/workflows/email-diario.yml`](.github/workflows/email-diario.yml),
+que roda de hora em hora (minuto 7) e chama `pnpm email-diario`. O GitHub pode atrasar alguns
+minutos; o e-mail sai na primeira execução depois da hora escolhida. Em Actions > E-mail
+diário > Run workflow dá para rodar à mão: "simular" só mostra o que seria enviado, e "agora"
+ignora a hora escolhida (o limite de um envio por dia continua valendo).
+
+### Configurar o Resend (uma vez)
+
+1. Crie a conta em resend.com e, em **API Keys**, gere uma chave com permissão de envio
+   ("Sending access").
+2. Na **Vercel**, em Settings > Environment Variables, cadastre `RESEND_API_KEY` (marque como
+   sensível) e faça um novo deploy. É o que envia os convites e o e-mail de teste.
+3. No **GitHub**, em Settings > Secrets and variables > Actions > Secrets, cadastre
+   `RESEND_API_KEY` com a mesma chave. É o que envia o e-mail diário.
+4. **Verifique um domínio** no Resend (Domains > Add Domain) e crie os registros DNS que ele
+   mostrar (SPF, DKIM). Sem isso, o Resend só entrega para o e-mail da própria conta do
+   Resend: serve para você testar, mas os convites e o e-mail diário dos outros usuários
+   falham (o app avisa e mostra o link do convite para copiar).
+5. Com o domínio verificado, cadastre o remetente em `EMAIL_REMETENTE`, no formato
+   `Licita Saúde <avisos@seu-dominio.com.br>`: na Vercel como variável de ambiente e no
+   GitHub como **Variable** (não é segredo).
+6. Opcional: no GitHub, a Variable `SITE_URL` com o endereço do app. Em branco, o workflow usa
+   o endereço da Vercel que está escrito nele; troque quando o app tiver domínio próprio.
+
+Sem `RESEND_API_KEY`, nada quebra: o convite continua funcionando pelo link, a tela de
+Notificações avisa que o envio não está configurado e o workflow termina sem fazer nada.
+
+O plano gratuito do Resend permite 100 e-mails por dia e 3.000 por mês (confira os limites
+atuais no site). Cada pessoa que recebe o e-mail diário conta um envio.
+
+### SMTP do Supabase (opcional, recomendado)
+
+O servidor de e-mail padrão do Supabase só envia para os membros do projeto no Supabase e tem
+limite baixo por hora, então a confirmação de cadastro de um cliente novo não chega. Com o
+domínio verificado no Resend, use o SMTP dele: no Supabase, em Authentication > Emails > SMTP
+Settings, ative "Custom SMTP" com host `smtp.resend.com`, porta `465`, usuário `resend`, a
+chave da API como senha e um remetente do domínio verificado.
+
+## Excluir a conta (LGPD)
+
+Em Configurações > Excluir conta, qualquer pessoa apaga a própria conta, digitando EXCLUIR
+para confirmar. Não há como desfazer.
+
+- **Responsável pela empresa:** a empresa é apagada junto, com o catálogo, os arquivos
+  enviados (Storage), as oportunidades e decisões, as buscas salvas, os convites, o registro
+  dos e-mails e a ligação com o Google (o app pede ao Google para invalidar o acesso; os
+  eventos e as pastas já criados continuam na conta do Google do cliente). As outras pessoas
+  da empresa continuam com o login, sem empresa.
+- **Membro:** sai da empresa e tem o login apagado. Os dados da empresa continuam.
+- As licitações públicas do PNCP não são dados do cliente e continuam no sistema.
+
+Quem ainda não tem empresa (cadastro pela metade, ou a empresa foi excluída pelo responsável)
+encontra a mesma opção no rodapé da tela de primeiros passos.
+
+A exclusão é feita pela função `excluir_conta` do banco, que só age sobre quem está logado.
+Transferir a empresa para outro responsável antes de sair ainda não existe: é ponto de
+extensão.
+
 ## Estrutura
 
 ```
@@ -666,8 +769,10 @@ src/lib/importacao/    leitura e validação da tabela de preços (Excel/CSV)
 src/lib/texto/         normalização e casamento de termos (coletor e triagem)
 src/lib/triagem/       motor da triagem (medidas, pontuação, alertas) e execução em lotes
 src/lib/busca/         filtros da tela de Busca (leitura do endereço, buscas salvas)
-coletor/               coletor do PNCP e triagem por organização (rodam no GitHub Actions)
-.github/workflows/     agendamento do coletor e da triagem
+src/lib/integracoes/   Google Agenda e Drive (OAuth, cifra, sincronização)
+src/lib/email/         Resend, e-mail diário e convite
+coletor/               coletor do PNCP, triagem, integrações e e-mail diário (rodam no GitHub Actions)
+.github/workflows/     agendamento do coletor (a cada 2 horas) e do e-mail diário (toda hora)
 src/proxy.ts           renova a sessão e redireciona visitantes para o login
 ```
 

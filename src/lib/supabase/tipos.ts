@@ -486,6 +486,53 @@ export type Database = {
           },
         ]
       }
+      email_envios: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          destinatarios: number
+          dia: string
+          erro: string | null
+          id: string
+          oportunidades: number
+          org_id: string
+          status: string
+          tipo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          destinatarios?: number
+          dia: string
+          erro?: string | null
+          id?: string
+          oportunidades?: number
+          org_id: string
+          status: string
+          tipo: string
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          destinatarios?: number
+          dia?: string
+          erro?: string | null
+          id?: string
+          oportunidades?: number
+          org_id?: string
+          status?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_envios_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       importacoes: {
         Row: {
           alterados: number
@@ -674,6 +721,7 @@ export type Database = {
           nome: string | null
           org_id: string
           papel: Database["public"]["Enums"]["papel_membro"]
+          recebe_email_diario: boolean
           user_id: string
         }
         Insert: {
@@ -682,6 +730,7 @@ export type Database = {
           nome?: string | null
           org_id: string
           papel?: Database["public"]["Enums"]["papel_membro"]
+          recebe_email_diario?: boolean
           user_id: string
         }
         Update: {
@@ -690,6 +739,7 @@ export type Database = {
           nome?: string | null
           org_id?: string
           papel?: Database["public"]["Enums"]["papel_membro"]
+          recebe_email_diario?: boolean
           user_id?: string
         }
         Relationships: [
@@ -915,6 +965,8 @@ export type Database = {
           atualizado_em: string
           cnpj: string
           criado_em: string
+          email_diario: boolean
+          email_diario_hora: number
           id: string
           onboarding_concluido_em: string | null
           plano: string
@@ -933,6 +985,8 @@ export type Database = {
           atualizado_em?: string
           cnpj: string
           criado_em?: string
+          email_diario?: boolean
+          email_diario_hora?: number
           id?: string
           onboarding_concluido_em?: string | null
           plano?: string
@@ -951,6 +1005,8 @@ export type Database = {
           atualizado_em?: string
           cnpj?: string
           criado_em?: string
+          email_diario?: boolean
+          email_diario_hora?: number
           id?: string
           onboarding_concluido_em?: string | null
           plano?: string
@@ -1264,6 +1320,7 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["status_oportunidade"]
       }
+      excluir_conta: { Args: { p_confirmacao: string }; Returns: string }
       integracao_conectar: {
         Args: { p_conta: string; p_credenciais: string; p_escopos: string[]; p_org: string; p_provedor: string }
         Returns: string
