@@ -45,7 +45,7 @@ function TrechosDoEdital({ edital }: { edital: NonNullable<DetalheDaCompra["edit
     return (
       <p className="mt-3 text-sm text-muted-foreground" data-testid="edital-sem-texto">
         O edital desta licitação está em imagem digitalizada (ou num formato que não é lido) e não pôde ser conferido
-        automaticamente. Os alertas acima vêm só do objeto e dos itens.
+        automaticamente. Os alertas desta licitação vêm só do objeto e dos itens.
       </p>
     );
   }
