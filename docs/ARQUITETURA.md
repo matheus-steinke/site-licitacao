@@ -392,6 +392,9 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     no coletor (`pnpm integracoes`), a cada rodada, com a chave de serviço, para acompanhar as
     mudanças de data detectadas no PNCP e terminar os envios (limite de 150 MB por arquivo).
     Por isso as credenciais do Google ficam também no GitHub Actions.
+    O link da oportunidade na descrição do evento fica gravado no vínculo: o coletor, que não
+    sabe o endereço do app, reaproveita esse link. Sem isso, app e coletor montavam descrições
+    diferentes e um "corrigia" o evento do outro a cada rodada (visto em produção em 25/11/2026).
 87. **Acesso revogado para de insistir:** a integração guarda o erro, o coletor a ignora e a
     tela pede para conectar de novo. O botão "Sincronizar" tenta e, se der certo, limpa o erro.
 88. **Agenda escolhida pelo ID** (decisão 5): em branco, a principal. O evento guarda em qual

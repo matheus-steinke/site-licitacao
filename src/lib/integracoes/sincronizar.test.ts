@@ -249,6 +249,28 @@ describe("oportunidade aprovada", () => {
     expect(m.vinculos.find((v) => v.tipo === "evento")?.dados.data_disputa).toBe("2026-12-10T13:00:00+00:00");
   });
 
+  it("o coletor, que não sabe o endereço do app, não mexe no evento criado pelo app", async () => {
+    const m = mundo({ integracao: { driveAtivo: false } });
+    await sincronizarOportunidade(m.deps, ORG, "op-1");
+    const descricao = [...m.eventos.values()][0].evento.description;
+    expect(descricao).toContain("Abrir a oportunidade: https://app.exemplo/oportunidades/op-1");
+    expect(m.vinculos[0].dados.link_do_app).toBe("https://app.exemplo/oportunidades/op-1");
+
+    const coletor = { ...m.deps, linkDoApp: undefined };
+    m.limpar();
+    expect((await sincronizarOportunidade(coletor, ORG, "op-1")).evento).toBe("igual");
+    expect(m.chamadas).toEqual([]);
+
+    // Quando a data muda, o coletor atualiza e mantém o link do app na descrição.
+    m.oportunidades.get("op-1")!.licitacao = licitacao({ dataDisputa: "2026-12-10T13:00:00+00:00" });
+    expect((await sincronizarOportunidade(coletor, ORG, "op-1")).evento).toBe("atualizado");
+    expect([...m.eventos.values()][0].evento.description).toContain("Abrir a oportunidade: https://app.exemplo/oportunidades/op-1");
+    // E o app, na vez seguinte, também não vê diferença.
+    m.limpar();
+    expect((await sincronizarOportunidade(m.deps, ORG, "op-1")).evento).toBe("igual");
+    expect(m.chamadas).toEqual([]);
+  });
+
   it("se o evento sumiu da agenda, cria outro ao atualizar", async () => {
     const m = mundo();
     await sincronizarOportunidade(m.deps, ORG, "op-1");

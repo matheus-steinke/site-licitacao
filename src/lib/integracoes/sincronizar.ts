@@ -43,7 +43,7 @@ export type OportunidadeParaIntegrar = {
   arquivos: ArquivoDoEdital[];
 };
 
-export type DadosDoEvento = { data_disputa?: string; assinatura?: string; agenda_id?: string };
+export type DadosDoEvento = { data_disputa?: string; assinatura?: string; agenda_id?: string; link_do_app?: string };
 export type ArquivoNoDrive = { id?: string; nome?: string; erro?: string; tentativas?: number; grande?: boolean };
 export type DadosDaPasta = { mes_id?: string; subpastas?: Record<string, string>; arquivos?: Record<string, ArquivoNoDrive> };
 
@@ -191,7 +191,11 @@ export async function sincronizarOportunidade(
           resultado.evento = "removido";
         }
       } else if (op.status === "aprovada" && temAgenda) {
-        const evento = montarEvento(licitacao, deps.linkDoApp?.(oportunidadeId) ?? null);
+        // O coletor não sabe o endereço do app: reaproveita o link gravado quando o evento foi
+        // criado. Sem isso, app e coletor montariam descrições diferentes e ficariam se
+        // "corrigindo" um ao outro a cada rodada.
+        const linkDoApp = deps.linkDoApp?.(oportunidadeId) ?? vEvento?.dados.link_do_app ?? null;
+        const evento = montarEvento(licitacao, linkDoApp);
         if (!evento) {
           if (manual) throw new Error("A licitação está sem data de disputa: não há como criar o evento.");
         } else {
@@ -200,6 +204,7 @@ export async function sincronizarOportunidade(
             data_disputa: licitacao.dataDisputa ?? undefined,
             assinatura,
             agenda_id: criado.agenda,
+            ...(linkDoApp ? { link_do_app: linkDoApp } : {}),
           });
           if (vEvento?.idExterno) {
             if (vEvento.dados.assinatura === assinatura && vEvento.situacao === "ok") {
