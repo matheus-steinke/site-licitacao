@@ -441,6 +441,44 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
     permissão, views com `security_invoker`, funções com `search_path` fixo, regras por
     `org_id`). As mesmas consultas foram rodadas na produção em 26/11/2026, sem achados.
 
+## Medição da etapa 10.0: texto dos editais (26/11/2026)
+
+Antes de construir a etapa 10, medimos uma amostra real: 60 licitações abertas da área da
+saúde (as 8 oportunidades da primeira empresa e 52 sorteadas), 121 arquivos do PNCP, texto
+extraído com `pdftotext`. Nada foi gravado no banco.
+
+- **Texto legível: 59 de 60 licitações.** A que faltou foi erro do próprio PNCP ao baixar
+  (HTTP 422). Dos 120 arquivos baixados, 104 eram PDF, 13 ZIP (quase sempre com PDFs dentro;
+  um com páginas HTML) e 3 DOCX. Só 11 arquivos eram imagem digitalizada, e em todos os casos
+  outro documento da mesma licitação tinha texto.
+- **A palavra "amostra" sozinha não serve de alerta:** aparece em 50 das 59 (85%), quase
+  sempre em cláusula padrão ("caso o termo de referência exija", lista de infrações) ou na
+  descrição de produto ("volume de amostra sanguínea").
+- **Frases inteiras separam bem os casos claros.** Com regras como "será exigida amostra",
+  "deverá apresentar amostra no prazo de N dias", "as amostras deverão ser entregues em" e
+  "não há exigência de amostra": 18 editais (31%) exigem, 3 (5%) dizem que não exigem, 29
+  (49%) só citam e 9 (15%) não citam. Lidos um a um, 16 dos 18 "exige" estavam certos e 2
+  eram modelos com campo em branco; os 3 "não exige" estavam certos. Há exigência real que as
+  regras não pegam (achamos uma em três editais conferidos e corrigimos a regra), então o
+  grupo "só cita" continua precisando do trecho para a pessoa conferir.
+- **O alerta atual (objeto e itens) erra:** marcou "amostra" em 10 das 60, nenhuma delas entre
+  as que exigem, e uma em que o edital diz que não há exigência. Das 18 que exigem, não
+  marcou nenhuma.
+- **Comodato é um alerta bom:** 10 editais citam (17%) e, nos 7 com "em regime de comodato" e
+  variações, todos tratavam de comodato de verdade. O alerta atual não marcou nenhum.
+- **Visita técnica ou vistoria:** 18 citam (31%); 7 dizem que não é exigida, 2 parecem exigir
+  (um deles é cláusula condicional).
+- **Exclusiva ME/EPP pelo texto não compensa:** 77% dos editais citam, e o PNCP já informa o
+  benefício item a item.
+- **Lote:** 26% citam "lote N" ou "grupo N" no texto. Não medimos se dá para ligar itens a
+  lotes; continua sem promessa.
+- **Peso:** edital e termo de referência somam 1,1 MB na mediana (3,1 MB na média, 25 MB o
+  maior) e 61 páginas na mediana. O texto tem 240 KB em média (65 KB comprimido); os trechos
+  dos alertas, cerca de 2 KB. Baixar leva 3,7 s por licitação em média e extrair, 0,3 s.
+- **Conta do banco:** guardar o texto inteiro das cerca de 1.700 licitações abertas daria
+  uns 400 MB brutos, num banco que hoje tem 124 MB e limite de 500 MB. Guardar só os trechos
+  dá poucos MB.
+
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 
 - **Busca** (`/api/search/`): aceita `modalidades=6|8` e `ufs=PR|SC`; devolve
