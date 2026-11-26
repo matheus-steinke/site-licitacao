@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { linkDoPncp, SITUACOES } from "../licitacao";
 import type { Database, Json } from "../supabase/tipos";
-import { descreverAlerta, lerAlertas } from "../triagem/alertas";
+import { lerAlertasDoEdital } from "../edital/regras";
+import { combinarAlertas, descreverAlerta, lerAlertas } from "../triagem/alertas";
 import type { ItemParaIntegrar } from "./conteudo";
 import type { Armazenamento, Integracao, OportunidadeParaIntegrar, Vinculo } from "./sincronizar";
 
@@ -66,7 +67,7 @@ export function criarArmazenamento(supabase: Cliente, provedor = "google"): Arma
       const { data: linha, error } = await supabase
         .from("oportunidades_lista")
         .select(
-          "id, compra_id, status, alertas, numero_compra, ano, sequencial, orgao_cnpj, orgao_nome, modalidade_nome, objeto, uf, municipio, data_disputa, situacao_id, exemplo",
+          "id, compra_id, status, alertas, alertas_do_edital, numero_compra, ano, sequencial, orgao_cnpj, orgao_nome, modalidade_nome, objeto, uf, municipio, data_disputa, situacao_id, exemplo",
         )
         .eq("org_id", orgId)
         .eq("id", oportunidadeId)
@@ -120,7 +121,9 @@ export function criarArmazenamento(supabase: Cliente, provedor = "google"): Arma
               ? null
               : linkDoPncp({ orgao_cnpj: linha.orgao_cnpj, ano: linha.ano, sequencial: linha.sequencial }),
           itens,
-          alertas: lerAlertas(linha.alertas).map((alerta) => descreverAlerta(alerta).texto),
+          alertas: combinarAlertas(lerAlertas(linha.alertas), lerAlertasDoEdital(linha.alertas_do_edital)).map(
+            (alerta) => descreverAlerta(alerta).texto,
+          ),
         },
         arquivos: (arquivos.data ?? []).map((a) => ({ id: a.id, sequencial: a.sequencial_documento, titulo: a.titulo, url: a.url })),
       };

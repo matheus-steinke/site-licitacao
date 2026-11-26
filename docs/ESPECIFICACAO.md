@@ -62,7 +62,7 @@ Idioma da interface: português do Brasil. Fuso: America/Sao_Paulo. Moeda: R$ (f
 - Licitação que o PNCP informa ter sido excluída (resposta 410 no detalhe) fica no sistema marcada como "Excluída do PNCP" (situação 99, código nosso) e deixa de ser conferida. (Aprovado em 25/11/2026.)
 - Filtro "área da saúde": manter só compras com pelo menos um item que case com algum segmento.
 - Retenção (aprovada em 24/11/2026, para o banco caber no plano gratuito): os itens das licitações com disputa encerrada há mais de 30 dias que nenhuma organização aprovou são apagados. A licitação (objeto, datas, situação, arquivos), as oportunidades e as decisões ficam; as aprovadas guardam os itens. O prazo é configurável.
-- Opcional, se couber no MVP: baixar o PDF do edital/TR, extrair o texto (pdftotext) e guardar, para os alertas do item 5.
+- Leitura do edital (aprovada em 26/11/2026, depois de uma medição com 60 editais): baixar o edital e o termo de referência, extrair o texto (pdftotext) e procurar frases sobre amostra, comodato e visita técnica, para os alertas do item 5. Guardar só os trechos encontrados, não o texto inteiro (não cabe no plano gratuito do banco).
 
 ### 4. Catálogo e tabela de preços (por organização)
 - Tela "Catálogo" com tabela editável (incluir, editar, excluir, buscar).
@@ -85,6 +85,7 @@ Para cada licitação nova nas UFs do cliente, comparar CADA item com o catálog
 - Lote/grupo: indicar "lote completo" ou "lote incompleto (faltam itens X, Y)".
 - Exclusivo ME/EPP: marcar o item. Se a empresa NÃO é ME/EPP, NÃO descartar: mostrar o alerta "exclusivo ME/EPP – repassar a parceiro".
 - Alertas por palavra no objeto/edital (quando houver o texto): amostra, comodato, visita técnica, exclusiva ME/EPP.
+- Alertas do texto do edital (aprovado em 26/11/2026): dois níveis, sempre com o trecho. "Exige amostra" quando há frase clara de exigência; "Cita amostra, conferir" nos demais casos em que a palavra aparece. O sistema NUNCA afirma que o edital não exige amostra (ou qualquer outra coisa): na dúvida, mostra o trecho para a pessoa conferir. O mesmo vale para comodato ("Prevê comodato" / "Cita comodato, conferir") e visita técnica (sempre "Cita visita técnica, conferir"). Exclusiva ME/EPP continua vindo do PNCP, item a item.
 - Resultado da oportunidade: score, itens compatíveis (item, descrição, qtd, unidade, valor de referência, produto sugerido, preço proposta, lance mínimo), alertas e valor estimado.
 - Valor de referência abaixo do LANCE MÍNIMO do cliente: alerta "referência abaixo do seu mínimo".
 - Os limites do score devem ficar fáceis de ajustar (configuração).

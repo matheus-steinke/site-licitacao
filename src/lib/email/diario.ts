@@ -19,6 +19,8 @@ export type OportunidadeDoEmail = {
   itensCompativeis: number;
   itensAVerificar: number;
   itensDoSegmento: number;
+  /** O que o edital exige com frase clara ("Exige amostra", "Prevê comodato"). */
+  destaques?: string[];
 };
 
 /** Quantas oportunidades o e-mail lista; o resto fica no link "ver todas". */
@@ -90,7 +92,10 @@ export function montarEmailDiario(dados: {
 <div style="font-weight:600;margin:3px 0"><a href="${escapar(link(op))}" style="color:#171717;text-decoration:none">${escapar(op.orgao)}</a></div>
 <div style="font-size:13px;color:#737373">${escapar(op.modalidade)} nº ${escapar(op.numeroCompra ?? "s/nº")}</div>
 <div style="font-size:14px;margin:6px 0">${escapar(curto(op.objeto, 180))}</div>
-<div style="font-size:13px;font-weight:600;color:${op.prioridade >= 2 ? "#15803d" : "#525252"}">${escapar(resumoDosItens(op))}</div>
+<div style="font-size:13px;font-weight:600;color:${op.prioridade >= 2 ? "#15803d" : "#525252"}">${escapar(resumoDosItens(op))}</div>${
+        op.destaques?.length ? `
+<div style="font-size:13px;font-weight:600;color:#b45309;margin-top:3px">${escapar(op.destaques.join(" · "))}</div>` : ""
+      }
 <div style="margin-top:6px"><a href="${escapar(link(op))}" style="${ESTILO.link};font-size:13px">Abrir a oportunidade</a></div>
 </td></tr>`,
     )
@@ -111,6 +116,7 @@ ${restantes > 0 ? `<p style="margin:14px 0 0;${ESTILO.discreto}">E mais ${restan
       `${op.orgao} (${op.modalidade} nº ${op.numeroCompra ?? "s/nº"})`,
       curto(op.objeto, 180),
       resumoDosItens(op),
+      ...(op.destaques?.length ? [op.destaques.join(" · ")] : []),
       link(op),
       "",
     ]),

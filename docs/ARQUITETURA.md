@@ -33,9 +33,10 @@ Leitura para qualquer usuário logado; escrita só pelo coletor (service role) o
 | Tabela | Conteúdo | Relações |
 |---|---|---|
 | `orgaos` | CNPJ, razão social, esfera | — |
-| `compras` | Controle PNCP (único), UF, município, modalidade, número, objeto, situação, datas, valor estimado, texto do edital (opcional) | → `orgaos` |
+| `compras` | Controle PNCP (único), UF, município, modalidade, número, objeto, situação, datas, valor estimado | → `orgaos` |
 | `compra_itens` | nº, descrição, quantidade, unidade, valor unitário, lote/grupo, benefício ME/EPP, medidas extraídas | → `compras` |
 | `compra_arquivos` | título, tipo, URL do PNCP | → `compras` |
+| `compra_editais` | leitura automática do edital: alertas (amostra, comodato, visita técnica), trechos, quais arquivos foram lidos e com que versão das regras | → `compras` |
 | `compra_item_segmentos` | quais segmentos casaram com cada item | → `compra_itens`, `segmentos` |
 | `compra_alteracoes` | histórico de mudança de data e situação | → `compras` |
 | `segmentos` | nome, palavras-chave, sinônimos, exclusões | — |
@@ -87,7 +88,7 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 | 7 | Dashboard | Conferir cartões e valor estimado |
 | 8 | Integrações Google Agenda e Drive | Aprovar e ver evento e pastas criados |
 | 9 | E-mail diário, convite por e-mail, excluir conta, testes de RLS, README final | Receber o e-mail; revisão geral |
-| 10 | Opcional: texto do edital (`pdftotext`) para alertas | Alertas de amostra, comodato, visita técnica |
+| 10 | Leitura do edital (`pdftotext`) para os alertas, com os trechos | Alertas de amostra, comodato e visita técnica com o trecho do edital |
 | 11 | Monitoramento das licitações (Compras.gov.br e Licitações-e), incluído em 26/11/2026. Estudo e plano em [`MONITORAMENTO.md`](MONITORAMENTO.md), aprovados pelo dono do projeto em 26/11/2026; começa por uma validação, antes de construir | Receber o aviso de uma mensagem do pregoeiro em segundos |
 
 ## Decisões aprovadas
@@ -478,6 +479,45 @@ extraído com `pdftotext`. Nada foi gravado no banco.
 - **Conta do banco:** guardar o texto inteiro das cerca de 1.700 licitações abertas daria
   uns 400 MB brutos, num banco que hoje tem 124 MB e limite de 500 MB. Guardar só os trechos
   dá poucos MB.
+
+## Decisões tomadas na etapa 10
+
+99. **Só os trechos são guardados** (decisão do dono do projeto, 26/11/2026): o texto inteiro
+    do edital é lido na memória do coletor e descartado. A coluna `compras.texto_edital`,
+    prevista no início e nunca usada, saiu. Consequência aceita: não dá para pesquisar dentro
+    dos editais na Busca.
+100. **O sistema nunca afirma que o edital não exige** (decisão do dono do projeto,
+    26/11/2026). Há dois níveis: "exige" (frase clara) e "cita" (a pessoa confere). A frase
+    "não há exigência de amostra" entra como citação, com o trecho na frente dos outros.
+    Edital lido sem nenhuma citação não gera aviso de "nada encontrado": a ausência de alerta
+    não é uma garantia. Os textos estão em `src/lib/triagem/alertas.ts` e têm teste que
+    proíbe "não exige", "sem exigência" e "dispensa".
+101. **A leitura é global, não por empresa:** uma linha por licitação em `compra_editais`,
+    feita pelo coletor, como os outros dados do PNCP. A triagem de cada empresa não muda: os
+    alertas do edital são combinados com os da triagem na hora de mostrar (lista, detalhe,
+    e-mail diário e evento da agenda), pela view `oportunidades_lista`. O alerta do edital
+    substitui o do mesmo tipo vindo do objeto; nenhum alerta some.
+102. **Quais arquivos:** os do tipo Edital, Termo de Referência e Aviso de Contratação Direta
+    (até 8, 40 MB cada). Sem nenhum deles, lê o que houver. Na medição, incluir os outros
+    anexos quase não mudou o resultado.
+103. **Formatos:** PDF pelo `pdftotext` (pacote `poppler-utils`), DOCX, ODT, HTML, texto puro e
+    ZIP com esses formatos dentro (biblioteca `fflate`). Imagem digitalizada fica "sem texto":
+    OCR está fora do MVP. Arquivo de fora não é confiável: há limite de tamanho e de
+    quantidade, o endereço tem de ser `https` do `pncp.gov.br`, e o `pdftotext` roda sem as
+    variáveis de ambiente do coletor (onde está a chave de serviço).
+104. **Regras por frase, com versão** (`src/lib/edital/regras.ts`, `VERSAO_DAS_REGRAS`): as
+    mesmas da medição. Quando a versão sobe, os editais abertos são relidos. Visita técnica
+    nunca sobe para "exige": na medição, as frases que pareciam exigir eram condicionais.
+105. **Quando relê:** arquivo novo na licitação (a assinatura da lista de arquivos muda), regra
+    nova ou falha anterior (até 5 tentativas, com 3 horas de intervalo). Só licitações
+    abertas, dos segmentos atendidos; primeiro as que já são oportunidade de alguma empresa.
+106. **Falha do PNCP não apaga o que se sabia:** se nada foi baixado e já havia uma leitura boa,
+    os alertas dela ficam. Três licitações seguidas sem nenhum arquivo entregue param o passo
+    (o PNCP está fora do ar) e essas falhas não contam como tentativa.
+107. **Passo próprio no workflow do coletor** (`pnpm editais`, depois da triagem e antes das
+    integrações), com 10 minutos por rodada; o que não couber fica para a próxima. A entrada
+    `editais_minutos` do disparo manual serve para a primeira carga.
+108. **Lote continua fora:** não medimos se o texto do edital permite ligar itens a lotes.
 
 ## O que a API do PNCP mostrou (conferido em 22/11/2026)
 

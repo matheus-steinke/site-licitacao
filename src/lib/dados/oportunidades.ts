@@ -5,7 +5,8 @@ import { listarSegmentosDeInteresse } from "@/lib/organizacao";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/tipos";
 import { contemTermo, prepararTermos, prepararTexto } from "@/lib/texto/normalizar";
-import { lerAlertas } from "@/lib/triagem/alertas";
+import { lerAlertasDoEdital, lerTrechosDoEdital } from "@/lib/edital/regras";
+import { combinarAlertas, lerAlertas } from "@/lib/triagem/alertas";
 import type { AlertaDeItem, DetalheDoCasamento, Nivel } from "@/lib/triagem/motor";
 
 export type StatusOportunidade = Database["public"]["Enums"]["status_oportunidade"];
@@ -47,7 +48,7 @@ function resumir(linha: Linha, agora: number) {
     segmentoIds: linha.segmento_ids ?? [],
     itensPorSegmento: lerContagem(linha.itens_por_segmento),
     valorEstimado: Number(linha.valor_estimado ?? 0),
-    alertas: lerAlertas(linha.alertas),
+    alertas: combinarAlertas(lerAlertas(linha.alertas), lerAlertasDoEdital(linha.alertas_do_edital)),
     controlePncp: linha.controle_pncp ?? "",
     numeroCompra: linha.numero_compra,
     uf: linha.uf ?? "",
@@ -172,7 +173,7 @@ export async function obterLicitacao(orgId: string, compraId: string) {
       .select(
         `id, controle_pncp, orgao_cnpj, ano, sequencial, numero_compra, uf, municipio, modalidade_nome, objeto,
          situacao_id, data_disputa, valor_total_estimado, exemplo, segmento_ids,
-         orgao:orgaos (razao_social), itens:compra_itens (count)`,
+         orgao:orgaos (razao_social), itens:compra_itens (count), edital:compra_editais (alertas)`,
       )
       .eq("id", compraId)
       .eq("area_saude", true)
@@ -200,6 +201,7 @@ export async function obterLicitacao(orgId: string, compraId: string) {
     segmento_ids: [],
     valor_estimado: 0,
     alertas: [],
+    alertas_do_edital: c.edital?.alertas ?? null,
     triada_em: null,
     criado_em: null,
     controle_pncp: c.controle_pncp,
@@ -228,7 +230,7 @@ async function carregarDetalhe(supabase: Cliente, orgId: string, linha: Linha, o
   const compraId = linha.compra_id as string;
   const deInteresse = await listarSegmentosDeInteresse(orgId);
   const idsDaEmpresa = deInteresse.map((s) => s.id);
-  const [casados, itens, arquivos, compra, doSegmento, exclusoes] = await Promise.all([
+  const [casados, itens, arquivos, compra, doSegmento, exclusoes, edital] = await Promise.all([
     oportunidadeId === null
       ? Promise.resolve({ data: [], error: null })
       : supabase
@@ -270,8 +272,11 @@ async function carregarDetalhe(supabase: Cliente, orgId: string, linha: Linha, o
           .in("segmento_id", idsDaEmpresa)
           .limit(LIMITE_DE_ITENS_DE_SEGMENTO),
     supabase.from("organizacao_exclusoes").select("termo").eq("org_id", orgId),
+    // Leitura automática do edital (dado global, feito pelo coletor): trechos dos alertas.
+    supabase.from("compra_editais").select("status, trechos, lido_em, arquivos_lidos, arquivos_total").eq("compra_id", compraId).maybeSingle(),
   ]);
-  const falha = casados.error ?? itens.error ?? arquivos.error ?? compra.error ?? doSegmento.error ?? exclusoes.error;
+  const falha =
+    casados.error ?? itens.error ?? arquivos.error ?? compra.error ?? doSegmento.error ?? exclusoes.error ?? edital.error;
   if (falha) throw new Error(`Falha ao carregar os itens da oportunidade: ${falha.message}`);
 
   // Segmentos por item. O que a empresa excluiu não conta, como na triagem.
@@ -369,6 +374,16 @@ async function carregarDetalhe(supabase: Cliente, orgId: string, linha: Linha, o
     segmentosDaEmpresa,
     totalDeOutros: Math.max(0, resumo.totalItens - compativeis.length),
     arquivos: arquivos.data ?? [],
+    /** null: o coletor ainda não leu o edital desta licitação. */
+    edital: edital.data
+      ? {
+          status: edital.data.status as "lido" | "sem_texto" | "erro",
+          lidoEm: edital.data.lido_em,
+          /** Documentos escolhidos (edital, termo de referência) que não tinham texto ou não foram baixados. */
+          naoLidos: Math.max(0, edital.data.arquivos_total - edital.data.arquivos_lidos),
+          trechos: lerTrechosDoEdital(edital.data.trechos),
+        }
+      : null,
   };
 }
 

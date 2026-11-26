@@ -1,5 +1,6 @@
 // Texto dos alertas da triagem, para as telas e (depois) para o e-mail e a agenda.
 
+import type { AlertaDoEdital } from "../edital/regras";
 import type { Alerta, AlertaDeItem } from "./motor";
 
 export type Tom = "atencao" | "informacao" | "bom";
@@ -23,12 +24,18 @@ export function descreverAlerta(alerta: Alerta): { texto: string; tom: Tom } {
       return { texto: `Lote ${alerta.lote} completo`, tom: "bom" };
     case "lote_incompleto":
       return { texto: `Lote ${alerta.lote} incompleto (faltam ${itens(alerta.faltam)})`, tom: "atencao" };
+    // O sistema nunca diz que o edital "não exige": ou há frase clara de exigência, ou é
+    // citação para a pessoa conferir.
     case "amostra":
-      return { texto: "Cita amostra", tom: "informacao" };
+      return alerta.nivel === "exige"
+        ? { texto: "Exige amostra", tom: "atencao" }
+        : { texto: "Cita amostra, conferir", tom: "informacao" };
     case "comodato":
-      return { texto: "Cita comodato", tom: "informacao" };
+      return alerta.nivel === "exige"
+        ? { texto: "Prevê comodato", tom: "atencao" }
+        : { texto: "Cita comodato, conferir", tom: "informacao" };
     case "visita_tecnica":
-      return { texto: "Cita visita técnica", tom: "informacao" };
+      return { texto: "Cita visita técnica, conferir", tom: "informacao" };
     case "exclusiva_me_epp":
       return { texto: "Licitação exclusiva ME/EPP", tom: "atencao" };
   }
@@ -49,4 +56,20 @@ export function lerAlertas(valor: unknown): Alerta[] {
   return valor.filter(
     (a): a is Alerta => typeof a === "object" && a !== null && conhecidos.has((a as { tipo?: string }).tipo ?? ""),
   );
+}
+
+/**
+ * Junta os alertas da triagem (objeto e itens) com os da leitura do edital. O do edital
+ * substitui o do mesmo tipo vindo do objeto, porque leu mais texto; nenhum alerta some. Os de
+ * exigência clara vão para a frente.
+ */
+export function combinarAlertas(daTriagem: Alerta[], doEdital: AlertaDoEdital[]): Alerta[] {
+  if (doEdital.length === 0) return daTriagem;
+  const tipos = new Set<string>(doEdital.map((a) => a.tipo));
+  const paraAlerta = (a: AlertaDoEdital): Alerta => (a.nivel === "exige" ? { tipo: a.tipo, nivel: "exige" } : { tipo: a.tipo });
+  return [
+    ...doEdital.filter((a) => a.nivel === "exige").map(paraAlerta),
+    ...daTriagem.filter((a) => !tipos.has(a.tipo)),
+    ...doEdital.filter((a) => a.nivel !== "exige").map(paraAlerta),
+  ];
 }

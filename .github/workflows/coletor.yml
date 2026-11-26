@@ -1,6 +1,7 @@
 name: Coletor do PNCP
 
-# Busca licitações da área da saúde no PNCP, grava no Supabase e faz a triagem por organização.
+# Busca licitações da área da saúde no PNCP, grava no Supabase, faz a triagem por organização e
+# lê os editais (alertas de amostra, comodato e visita técnica).
 # Configuração (uma vez), em Settings > Secrets and variables > Actions:
 #   - Secret   SUPABASE_SERVICE_ROLE_KEY: chave "service_role"/"secret" do Supabase
 #   - Variable SUPABASE_URL: https://SEU-PROJETO.supabase.co
@@ -29,6 +30,10 @@ on:
         description: "Pular a coleta: só refazer a triagem das organizações"
         type: boolean
         default: false
+      editais_minutos:
+        description: "Minutos para ler editais nesta rodada (em branco = 10). Use mais na primeira carga."
+        required: false
+        type: string
 
 # Nunca duas rodadas ao mesmo tempo: a nova espera a anterior terminar.
 concurrency:
@@ -79,6 +84,20 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm triagem
+
+      # Lê o edital e o termo de referência das licitações abertas, procura frases sobre amostra,
+      # comodato e visita técnica e guarda só os trechos (o texto inteiro não é guardado). O que
+      # não couber no tempo fica para a próxima rodada. O pdftotext vem do pacote poppler-utils.
+      - name: Leitura dos editais
+        if: ${{ !cancelled() }}
+        timeout-minutes: 50
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EDITAIS_MINUTOS: ${{ inputs.editais_minutos }}
+        run: |
+          command -v pdftotext >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils)
+          pnpm editais
 
       # Google Agenda e Drive: atualiza o evento quando a data da disputa muda, tira da agenda o
       # que deixou de estar aprovado e termina o envio dos arquivos do edital. Sem as credenciais

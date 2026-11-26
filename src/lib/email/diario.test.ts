@@ -23,6 +23,17 @@ describe("resumoDosItens", () => {
   });
 });
 
+describe("destaques do edital", () => {
+  it("aparecem no HTML e no texto só quando existem", () => {
+    const com = montarEmailDiario({ empresa: "Distribuidora A", oportunidades: [op({ destaques: ["Exige amostra", "Prevê comodato"] })], site: SITE, agora: AGORA });
+    expect(com.html).toContain("Exige amostra · Prevê comodato");
+    expect(com.texto).toContain("Exige amostra · Prevê comodato");
+    const sem = montarEmailDiario({ empresa: "Distribuidora A", oportunidades: [op({ destaques: [] }), op({ id: "o2" })], site: SITE, agora: AGORA });
+    expect(sem.html).not.toContain("#b45309");
+    expect(sem.texto).not.toContain("amostra");
+  });
+});
+
 describe("ordenar", () => {
   it("catálogo primeiro; depois a disputa mais próxima", () => {
     const lista = ordenar([

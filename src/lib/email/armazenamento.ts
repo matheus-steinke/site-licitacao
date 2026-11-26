@@ -2,7 +2,9 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { lerAlertasDoEdital } from "../edital/regras";
 import type { Database } from "../supabase/tipos";
+import { descreverAlerta } from "../triagem/alertas";
 import type { OportunidadeDoEmail } from "./diario";
 import type { ArmazenamentoDoEmail, EnvioDoDia } from "./envio-diario";
 
@@ -12,11 +14,11 @@ const SITUACOES_ENCERRADAS = "(2,3,99)";
 export const ENVIO_NAO_CONCLUIDO = "O envio não foi concluído.";
 
 export const COLUNAS_DA_OPORTUNIDADE =
-  "id, orgao_nome, modalidade_nome, numero_compra, uf, municipio, data_disputa, objeto, prioridade, itens_compativeis, itens_a_verificar, itens_do_segmento";
+  "id, orgao_nome, modalidade_nome, numero_compra, uf, municipio, data_disputa, objeto, prioridade, itens_compativeis, itens_a_verificar, itens_do_segmento, alertas_do_edital";
 
 type LinhaDaLista = Pick<
   Database["public"]["Views"]["oportunidades_lista"]["Row"],
-  "id" | "orgao_nome" | "modalidade_nome" | "numero_compra" | "uf" | "municipio" | "data_disputa" | "objeto" | "prioridade" | "itens_compativeis" | "itens_a_verificar" | "itens_do_segmento"
+  "id" | "orgao_nome" | "modalidade_nome" | "numero_compra" | "uf" | "municipio" | "data_disputa" | "objeto" | "prioridade" | "itens_compativeis" | "itens_a_verificar" | "itens_do_segmento" | "alertas_do_edital"
 >;
 
 export function paraOportunidadeDoEmail(linha: LinhaDaLista): OportunidadeDoEmail {
@@ -33,6 +35,10 @@ export function paraOportunidadeDoEmail(linha: LinhaDaLista): OportunidadeDoEmai
     itensCompativeis: linha.itens_compativeis ?? 0,
     itensAVerificar: linha.itens_a_verificar ?? 0,
     itensDoSegmento: linha.itens_do_segmento ?? 0,
+    // Só o que o edital exige com frase clara; as citações ficam para a tela.
+    destaques: lerAlertasDoEdital(linha.alertas_do_edital)
+      .filter((alerta) => alerta.nivel === "exige")
+      .map((alerta) => descreverAlerta({ tipo: alerta.tipo, nivel: "exige" }).texto),
   };
 }
 

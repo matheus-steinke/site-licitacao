@@ -19,7 +19,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 7 | Dashboard | Pronta |
 | 8 | Integrações Google Agenda e Drive | Pronta |
 | 9 | E-mail diário, convite por e-mail, excluir conta, testes de RLS completos | Pronta |
-| 10 | Opcional: texto do edital para alertas | A fazer |
+| 10 | Leitura do edital para os alertas de amostra, comodato e visita técnica | Pronta |
 | 11 | Monitoramento das licitações (chat do pregão, convocações, resultado) | Plano aprovado em 26/11/2026; começa pela validação: [`docs/MONITORAMENTO.md`](docs/MONITORAMENTO.md) |
 
 ## Stack
@@ -77,6 +77,7 @@ como segredo do GitHub Actions.
 | `pnpm test:db` | Aplica migrations e seed num Postgres local descartável e testa as regras de RLS |
 | `pnpm coletor` | Roda uma rodada do coletor do PNCP (veja a seção Coletor) |
 | `pnpm triagem` | Compara as licitações com o catálogo de cada organização (veja a seção Triagem) |
+| `pnpm editais` | Lê o edital das licitações abertas e guarda os alertas e os trechos (veja Leitura do edital) |
 | `pnpm integracoes` | Sincroniza Google Agenda e Drive de cada organização (veja a seção Integrações) |
 | `pnpm email-diario` | Envia o e-mail diário das empresas que estão na hora (veja a seção E-mails) |
 
@@ -130,7 +131,7 @@ Dados globais:
 | Tabela | Visitante | Usuário logado | Admin da plataforma | Coletor (service role) |
 |---|---|---|---|---|
 | `segmentos` | nada | lê | lê e edita | tudo |
-| `orgaos`, `compra_itens`, `compra_arquivos` | nada | lê | lê | tudo |
+| `orgaos`, `compra_itens`, `compra_arquivos`, `compra_editais` | nada | lê | lê | tudo |
 | `compras` | nada | lê só as da área da saúde | lê todas | tudo |
 | `compra_item_segmentos`, `compra_alteracoes` | nada | lê | lê | tudo |
 | `coletor_rodadas`, `coletor_erros` | nada | nada | lê | tudo |
@@ -399,10 +400,41 @@ compatível, 50 para verificar).
 | Exclusivo ME/EPP | item exclusivo e a empresa é ME/EPP |
 | Referência abaixo do seu mínimo | valor de referência do edital menor que o lance mínimo do produto |
 | Lote completo / incompleto (faltam itens X, Y) | a descrição dos itens começa com "LOTE n", "GRUPO n" ou "(Ln)" |
-| Cita amostra, comodato, visita técnica; licitação exclusiva ME/EPP | palavra no objeto do edital |
+| Licitação exclusiva ME/EPP | palavra no objeto do edital |
+| Exige amostra | frase clara no edital ou no termo de referência ("será exigida amostra", "deverá apresentar amostra no prazo de 5 dias") |
+| Cita amostra, conferir | a palavra aparece no objeto, nos itens ou no edital, sem frase clara de exigência |
+| Prevê comodato / Cita comodato, conferir | "em regime de comodato" e variações no edital / a palavra aparece |
+| Cita visita técnica, conferir | "visita técnica" ou "vistoria" no objeto ou no edital |
 
 O PNCP não informa o lote de cada item (veja `docs/ARQUITETURA.md`): o alerta de lote só
-existe quando o órgão escreve o lote na descrição. O texto do edital (etapa 10) vai ampliar isso.
+existe quando o órgão escreve o lote na descrição.
+
+### Leitura do edital
+
+Depois da triagem, o coletor baixa o **edital** e o **termo de referência** de cada licitação
+aberta, extrai o texto e procura frases sobre amostra, comodato e visita técnica. Sem IA: são
+regras de texto (`src/lib/edital/regras.ts`), tiradas de uma medição com 60 editais reais
+(`docs/ARQUITETURA.md`).
+
+- **O sistema nunca diz que o edital não exige.** Ou há frase clara ("Exige amostra"), ou a
+  palavra aparece e a pessoa confere ("Cita amostra, conferir"). Uma frase como "não há
+  exigência de amostra" aparece como citação, com o trecho. Ausência de alerta não é garantia.
+- **Na tela da oportunidade,** o bloco "O que o edital diz" mostra até três trechos por
+  assunto, com o nome do arquivo. O e-mail diário e o evento da agenda levam "Exige amostra"
+  e "Prevê comodato".
+- **Só os trechos são guardados,** não o texto inteiro (não caberia no plano gratuito do banco).
+- **Documento digitalizado** (imagem) não é lido: a tela avisa. Na medição, 59 de 60
+  licitações tinham texto.
+- **A leitura é refeita** quando o órgão publica outro arquivo ou quando as regras mudam.
+- No workflow, o passo "Leitura dos editais" usa até 10 minutos por rodada e instala o
+  `pdftotext` (pacote `poppler-utils`). Para a primeira carga, dispare o workflow à mão com
+  "Pular a coleta" marcado e `editais_minutos` em 40.
+
+Na sua máquina (precisa do `pdftotext`: `sudo apt-get install poppler-utils`):
+
+```bash
+SUPABASE_URL=https://SEU-PROJETO.supabase.co SUPABASE_SERVICE_ROLE_KEY=... pnpm editais --max 20
+```
 
 ### Quando a triagem roda
 

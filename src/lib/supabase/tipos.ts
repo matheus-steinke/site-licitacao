@@ -193,6 +193,59 @@ export type Database = {
           },
         ]
       }
+      compra_editais: {
+        Row: {
+          alertas: Json
+          arquivos_lidos: number
+          arquivos_total: number
+          assinatura: string
+          compra_id: string
+          criado_em: string
+          erro: string | null
+          lido_em: string
+          status: string
+          tentativas: number
+          trechos: Json
+          versao: number
+        }
+        Insert: {
+          alertas?: Json
+          arquivos_lidos?: number
+          arquivos_total?: number
+          assinatura: string
+          compra_id: string
+          criado_em?: string
+          erro?: string | null
+          lido_em?: string
+          status: string
+          tentativas?: number
+          trechos?: Json
+          versao: number
+        }
+        Update: {
+          alertas?: Json
+          arquivos_lidos?: number
+          arquivos_total?: number
+          assinatura?: string
+          compra_id?: string
+          criado_em?: string
+          erro?: string | null
+          lido_em?: string
+          status?: string
+          tentativas?: number
+          trechos?: Json
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compra_editais_compra_id_fkey"
+            columns: ["compra_id"]
+            isOneToOne: true
+            referencedRelation: "compras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compra_arquivos: {
         Row: {
           compra_id: string
@@ -355,7 +408,6 @@ export type Database = {
           situacao_id: number
           srp: boolean | null
           tentativas_itens: number
-          texto_edital: string | null
           uf: string
           unidade_codigo: string | null
           unidade_nome: string | null
@@ -393,7 +445,6 @@ export type Database = {
           situacao_id?: number
           srp?: boolean | null
           tentativas_itens?: number
-          texto_edital?: string | null
           uf: string
           unidade_codigo?: string | null
           unidade_nome?: string | null
@@ -431,7 +482,6 @@ export type Database = {
           situacao_id?: number
           srp?: boolean | null
           tentativas_itens?: number
-          texto_edital?: string | null
           uf?: string
           unidade_codigo?: string | null
           unidade_nome?: string | null
@@ -1253,6 +1303,7 @@ export type Database = {
           itens_a_verificar: number | null
           itens_compativeis: number | null
           itens_do_segmento: number | null
+          alertas_do_edital: Json | null
           itens_por_segmento: Json | null
           modalidade_nome: string | null
           motivo_descarte: string | null
@@ -1298,6 +1349,24 @@ export type Database = {
       coletor_gravar_compra: {
         Args: { p_arquivos?: Json; p_compra: Json; p_itens?: Json }
         Returns: Json
+      }
+      coletor_editais_pendentes: {
+        Args: { p_limite?: number; p_versao: number }
+        Returns: Json
+      }
+      coletor_gravar_edital: {
+        Args: {
+          p_alertas: Json
+          p_arquivos_lidos: number
+          p_arquivos_total: number
+          p_assinatura: string
+          p_compra: string
+          p_erro?: string
+          p_status: string
+          p_trechos: Json
+          p_versao: number
+        }
+        Returns: undefined
       }
       coletor_marcar_excluida: { Args: { p_controle: string }; Returns: boolean }
       coletor_remover_itens_antigos: {

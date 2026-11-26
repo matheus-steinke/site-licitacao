@@ -16,6 +16,7 @@ import {
   type SegmentoDaEmpresa,
   type StatusOportunidade,
 } from "@/lib/dados/oportunidades";
+import type { TipoDeAlertaDoEdital } from "@/lib/edital/regras";
 import { formatarData, formatarDataHora, formatarDiaSemana, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { corDoSegmento } from "@/lib/segmentos-cores";
 import { ROTULO_DO_ALERTA_DE_ITEM } from "@/lib/triagem/alertas";
@@ -28,6 +29,58 @@ const ROTULO_DO_STATUS: Record<StatusOportunidade, string> = {
   ganha: "Ganha",
   perdida: "Perdida",
 };
+
+const ASSUNTO_DO_TRECHO: Record<TipoDeAlertaDoEdital, string> = {
+  amostra: "Amostra",
+  comodato: "Comodato",
+  visita_tecnica: "Visita técnica",
+};
+
+/**
+ * Trechos que a leitura automática achou no edital e no termo de referência. O sistema só
+ * mostra o que achou: não afirma que o edital dispensa alguma coisa.
+ */
+function TrechosDoEdital({ edital }: { edital: NonNullable<DetalheDaCompra["edital"]> }) {
+  if (edital.status === "sem_texto") {
+    return (
+      <p className="mt-3 text-sm text-muted-foreground" data-testid="edital-sem-texto">
+        O edital desta licitação está em imagem digitalizada (ou num formato que não é lido) e não pôde ser conferido
+        automaticamente. Os alertas acima vêm só do objeto e dos itens.
+      </p>
+    );
+  }
+  if (edital.trechos.length === 0) return null;
+  const assuntos = [...new Set(edital.trechos.map((trecho) => trecho.tipo))];
+  return (
+    <div className="mt-3 rounded-xl border p-4" data-testid="trechos-do-edital">
+      <h3 className="text-sm font-medium">O que o edital diz</h3>
+      <div className="mt-3 space-y-4">
+        {assuntos.map((assunto) => (
+          <div key={assunto}>
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{ASSUNTO_DO_TRECHO[assunto]}</p>
+            <ul className="mt-1.5 space-y-2">
+              {edital.trechos
+                .filter((trecho) => trecho.tipo === assunto)
+                .map((trecho, indice) => (
+                  <li key={indice} className="border-l-2 pl-3 text-sm">
+                    <q className="text-foreground/90">{trecho.texto}</q>
+                    {trecho.arquivo ? <span className="mt-0.5 block text-xs text-muted-foreground">{trecho.arquivo}</span> : null}
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground">
+        Trechos encontrados automaticamente no edital e no termo de referência, lidos em {formatarData(edital.lidoEm)}. A
+        leitura procura frases, não interpreta o documento: confira sempre o edital.
+        {edital.naoLidos > 0
+          ? ` ${edital.naoLidos === 1 ? "Um documento não pôde ser lido" : `${edital.naoLidos} documentos não puderam ser lidos`} (imagem digitalizada ou falha ao baixar).`
+          : ""}
+      </p>
+    </div>
+  );
+}
 
 function Dado({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
@@ -240,14 +293,17 @@ export function DetalheDaLicitacao({ op, integracoes }: { op: DetalheDaCompra; i
         ) : null}
       </section>
 
-      {op.alertas.length > 0 ? (
+      {op.alertas.length > 0 || op.edital?.status === "sem_texto" ? (
         <section aria-labelledby="titulo-alertas" className="mb-6">
           <h2 id="titulo-alertas" className="mb-2 font-medium">
             Alertas
           </h2>
-          <div className="flex flex-wrap gap-1.5">
-            <ChipsDeAlerta alertas={op.alertas} />
-          </div>
+          {op.alertas.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              <ChipsDeAlerta alertas={op.alertas} />
+            </div>
+          ) : null}
+          {op.edital ? <TrechosDoEdital edital={op.edital} /> : null}
         </section>
       ) : null}
 

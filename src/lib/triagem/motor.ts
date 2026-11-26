@@ -83,7 +83,8 @@ export type Alerta =
   | { tipo: "referencia_abaixo_minimo"; itens: number[] }
   | { tipo: "lote_completo"; lote: string }
   | { tipo: "lote_incompleto"; lote: string; faltam: number[] }
-  | { tipo: "amostra" | "comodato" | "visita_tecnica" | "exclusiva_me_epp" };
+  // "nivel" só aparece quando o texto do edital foi lido (src/lib/edital): frase clara de exigência.
+  | { tipo: "amostra" | "comodato" | "visita_tecnica" | "exclusiva_me_epp"; nivel?: "exige" };
 
 /** 3 = tem item compatível com o catálogo; 2 = só itens a verificar; 1 = só o segmento; 0 = nada. */
 export type Prioridade = 0 | 1 | 2 | 3;
