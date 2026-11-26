@@ -20,6 +20,7 @@ Triagem 100% sem IA neste MVP: regras, palavras-chave, medidas e similaridade de
 | 8 | Integrações Google Agenda e Drive | Pronta |
 | 9 | E-mail diário, excluir conta, testes de RLS completos | A fazer |
 | 10 | Opcional: texto do edital para alertas | A fazer |
+| 11 | Monitoramento das licitações (chat do pregão, convocações, resultado) | Em estudo: [`docs/MONITORAMENTO.md`](docs/MONITORAMENTO.md) |
 
 ## Stack
 

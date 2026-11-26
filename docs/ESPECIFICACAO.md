@@ -123,6 +123,15 @@ Para cada licitação nova nas UFs do cliente, comparar CADA item com o catálog
 - E-mail diário (horário configurável) com as oportunidades novas das UFs e segmentos do cliente.
 - Opção de desligar.
 
+### 11. Monitoramento das licitações (incluído pelo dono do projeto em 26/11/2026)
+- Acompanhar as licitações que a empresa aprovou, depois da decisão de participar: mensagens do pregoeiro no chat, convocações com prazo, diligências, suspensão ou remarcação e resultado.
+- Portais iniciais: Compras.gov.br e Licitações-e (Banco do Brasil).
+- O aviso precisa ser quase instantâneo: uma espera de minutos não atende. Meta de até 30 segundos no Compras.gov, a confirmar na validação.
+- Alertas sem IA: mensagem dirigida ao CNPJ da empresa, categoria da mensagem, palavras-chave e prazo lido do texto.
+- Avisos no sistema (som e notificação), no celular e por e-mail.
+- O caminho técnico, os custos e o que ainda precisa ser validado estão em [`MONITORAMENTO.md`](MONITORAMENTO.md). Nada é construído antes da validação descrita lá e da aprovação do caminho.
+- Continua fora: responder no chat, enviar documentos e dar lances.
+
 ## Fora do MVP (não fazer agora; deixe pontos de extensão)
 IA/LLM, montagem de proposta, cadastro em portais de disputa, robô de lances, pós-disputa, atas e empenhos, cobrança/assinatura (só deixe o campo "plano" na organização).
 

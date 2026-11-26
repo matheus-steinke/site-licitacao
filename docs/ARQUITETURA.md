@@ -88,6 +88,7 @@ As tabelas são criadas na etapa que as usa, não todas de uma vez.
 | 8 | Integrações Google Agenda e Drive | Aprovar e ver evento e pastas criados |
 | 9 | E-mail diário, excluir conta, testes de RLS, README final | Receber o e-mail; revisão geral |
 | 10 | Opcional: texto do edital (`pdftotext`) para alertas | Alertas de amostra, comodato, visita técnica |
+| 11 | Monitoramento das licitações (Compras.gov.br e Licitações-e), incluído em 26/11/2026. Estudo e plano em [`MONITORAMENTO.md`](MONITORAMENTO.md); começa por uma validação, antes de construir | Receber o aviso de uma mensagem do pregoeiro em segundos |
 
 ## Decisões aprovadas
 
